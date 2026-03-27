@@ -9,6 +9,7 @@ import (
 	"github.com/Jasrags/atc/internal/aircraft"
 	"github.com/Jasrags/atc/internal/collision"
 	"github.com/Jasrags/atc/internal/command"
+	"github.com/Jasrags/atc/internal/gamemap"
 	"github.com/Jasrags/atc/internal/radar"
 	"github.com/Jasrags/atc/internal/runway"
 	"github.com/Jasrags/atc/internal/ui"
@@ -20,8 +21,6 @@ import (
 const (
 	minWidth  = 60
 	minHeight = 24
-	radarW    = 60
-	radarH    = 30
 )
 
 type screen int
@@ -34,7 +33,14 @@ const (
 	screenGameOver
 )
 
-var menuItems = []ui.MenuItem{
+type menuScreen int
+
+const (
+	menuMain menuScreen = iota
+	menuMapSelect
+)
+
+var mainMenuItems = []ui.MenuItem{
 	{Label: "New Game", Key: "n"},
 	{Label: "Help", Key: "h"},
 	{Label: "Quit", Key: "q"},
@@ -43,10 +49,13 @@ var menuItems = []ui.MenuItem{
 // Model is the top-level bubbletea model for the ATC game.
 type Model struct {
 	screen       screen
+	menuScreen   menuScreen
 	menuSelected int
-	aircraft     map[string]aircraft.Aircraft
-	runway       runway.Runway
-	spawner      aircraft.Spawner
+	maps         []gamemap.Map
+	gameMap      gamemap.Map
+	aircraft   map[string]aircraft.Aircraft
+	runways    []runway.Runway
+	spawner      *aircraft.Spawner
 	input        textinput.Model
 	score        int
 	messages     []string
@@ -60,11 +69,26 @@ type Model struct {
 
 // NewModel creates a new model starting at the main menu.
 func NewModel() Model {
+	maps := gamemap.All()
+	if len(maps) == 0 {
+		panic("gamemap.All returned no maps")
+	}
+	gm := maps[0]
 	return Model{
 		screen:   screenMenu,
+		maps:     maps,
+		gameMap:  gm,
 		aircraft: make(map[string]aircraft.Aircraft),
-		runway:   runway.New(radarW/2, radarH-5, 270, 5),
+		runways:  buildRunways(gm),
 	}
+}
+
+func buildRunways(gm gamemap.Map) []runway.Runway {
+	runways := make([]runway.Runway, len(gm.Runways))
+	for i, r := range gm.Runways {
+		runways[i] = runway.New(r.X, r.Y, r.Heading, r.Length)
+	}
+	return runways
 }
 
 func (m Model) Init() tea.Cmd {
@@ -119,36 +143,63 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // --- Menu ---
 
 func (m Model) handleMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.menuScreen == menuMapSelect {
+		return m.handleMapSelectKey(msg)
+	}
+
 	switch msg.String() {
 	case "up", "k":
 		if m.menuSelected > 0 {
 			m.menuSelected--
 		}
 	case "down", "j":
-		if m.menuSelected < len(menuItems)-1 {
+		if m.menuSelected < len(mainMenuItems)-1 {
 			m.menuSelected++
 		}
 	case "enter":
-		return m.selectMenuItem()
+		return m.selectMainMenuItem()
 	case "q", "esc":
 		return m, tea.Quit
 	case "n":
-		return m.startGame()
+		m.menuScreen = menuMapSelect
+		m.menuSelected = 0
 	case "h", "?":
 		m.screen = screenHelp
 	}
 	return m, nil
 }
 
-func (m Model) selectMenuItem() (tea.Model, tea.Cmd) {
-	switch menuItems[m.menuSelected].Key {
+func (m Model) selectMainMenuItem() (tea.Model, tea.Cmd) {
+	switch mainMenuItems[m.menuSelected].Key {
 	case "n":
-		return m.startGame()
+		m.menuScreen = menuMapSelect
+		m.menuSelected = 0
+		return m, nil
 	case "h":
 		m.screen = screenHelp
 		return m, nil
 	case "q":
 		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m Model) handleMapSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if m.menuSelected > 0 {
+			m.menuSelected--
+		}
+	case "down", "j":
+		if m.menuSelected < len(m.maps)-1 {
+			m.menuSelected++
+		}
+	case "enter":
+		m.gameMap = m.maps[m.menuSelected]
+		return m.startGame()
+	case "esc":
+		m.menuScreen = menuMain
+		m.menuSelected = 0
 	}
 	return m, nil
 }
@@ -162,13 +213,14 @@ func (m Model) startGame() (Model, tea.Cmd) {
 
 	m.screen = screenPlaying
 	m.aircraft = make(map[string]aircraft.Aircraft)
+	m.runways = buildRunways(m.gameMap)
 	m.spawner = aircraft.NewSpawner(time.Now().UnixNano())
 	m.input = ti
 	m.score = 0
-	m.messages = []string{ui.FormatInfo("Welcome to ATC! Type ? for help.")}
+	m.messages = []string{ui.FormatInfo(fmt.Sprintf("Welcome to %s! Type ? for help.", m.gameMap.Name))}
 	m.elapsed = 0
 	m.pauseElapsed = 0
-	m.started = false
+	m.started = true
 	m.startTime = time.Now()
 
 	return m, tea.Batch(tickCmd(), textinput.Blink)
@@ -188,10 +240,9 @@ func (m Model) handlePlayingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "p":
-		m.paused()
 		m.screen = screenPaused
 		m.pauseElapsed = m.elapsed
-		m.messages = append(m.messages, ui.FormatInfo("Game paused"))
+		m = m.addMessage(ui.FormatInfo("Game paused"))
 		return m, nil
 	}
 
@@ -209,25 +260,21 @@ func (m Model) handlePlayingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// paused is a no-op placeholder to avoid confusion with the screen state.
-// The actual pause logic is handled by switching to screenPaused.
-func (m Model) paused() {}
-
 func (m Model) processCommand(input string) Model {
 	cmd, err := command.Parse(input)
 	if err != nil {
-		m.messages = append(m.messages, ui.FormatError(err.Error()))
+		m = m.addMessage(ui.FormatError(err.Error()))
 		return m
 	}
 
 	newPlanes, msg, err := command.Execute(cmd, m.aircraft)
 	if err != nil {
-		m.messages = append(m.messages, ui.FormatError(err.Error()))
+		m = m.addMessage(ui.FormatError(err.Error()))
 		return m
 	}
 
 	m.aircraft = newPlanes
-	m.messages = append(m.messages, ui.FormatSuccess(msg))
+	m = m.addMessage(ui.FormatSuccess(msg))
 	return m
 }
 
@@ -252,7 +299,7 @@ func (m Model) handlePausedKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "p":
 		m.screen = screenPlaying
 		m.startTime = time.Now().Add(-m.pauseElapsed)
-		m.messages = append(m.messages, ui.FormatInfo("Game resumed"))
+		m = m.addMessage(ui.FormatInfo("Game resumed"))
 		return m, tickCmd()
 	case "q":
 		return m, tea.Quit
@@ -296,7 +343,7 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 	newAircraft := make(map[string]aircraft.Aircraft, len(m.aircraft))
 	for k, ac := range m.aircraft {
 		next := ac.Tick()
-		if !next.IsOffScreen(radarW, radarH) {
+		if !next.IsOffScreen(m.gameMap.Width, m.gameMap.Height) {
 			newAircraft[k] = next
 		}
 	}
@@ -314,24 +361,27 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 			ac2.State = aircraft.Crashed
 			m.aircraft[c.Callsign2] = ac2
 
-			m.messages = append(m.messages,
+			m = m.addMessage(
 				ui.FormatError(fmt.Sprintf("COLLISION: %s and %s!", c.Callsign1, c.Callsign2)))
 		}
 		m.screen = screenGameOver
 		return m, nil
 	}
 
-	// Check landings
+	// Check landings against all runways
 	for k, ac := range m.aircraft {
 		if ac.State != aircraft.Landing {
 			continue
 		}
-		if m.runway.CanLand(ac.GridX(), ac.GridY(), ac.Heading, ac.Altitude) {
-			ac.State = aircraft.Landed
-			m.aircraft[k] = ac
-			m.score++
-			m.messages = append(m.messages,
-				ui.FormatSuccess(fmt.Sprintf("%s landed safely! Score: %d", ac.Callsign, m.score)))
+		for _, rw := range m.runways {
+			if rw.CanLand(ac.GridX(), ac.GridY(), ac.Heading, ac.Altitude) {
+				ac.State = aircraft.Landed
+				m.aircraft[k] = ac
+				m.score++
+				m = m.addMessage(
+					ui.FormatSuccess(fmt.Sprintf("%s landed safely! Score: %d", ac.Callsign, m.score)))
+				break
+			}
 		}
 	}
 
@@ -344,10 +394,10 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 
 	// Spawn new aircraft
 	if m.spawner.ShouldSpawn(m.elapsed, len(m.aircraft)) {
-		ac := m.spawner.Spawn(radarW, radarH)
+		ac := m.spawner.Spawn(m.gameMap.Width, m.gameMap.Height)
 		if _, exists := m.aircraft[ac.Callsign]; !exists {
 			m.aircraft[ac.Callsign] = ac
-			m.messages = append(m.messages, ui.FormatInfo(ac.Callsign+" entering airspace"))
+			m = m.addMessage(ui.FormatInfo(ac.Callsign + " entering airspace"))
 		}
 	}
 
@@ -369,9 +419,19 @@ func (m Model) View() string {
 
 	switch m.screen {
 	case screenMenu:
+		var menuView string
+		if m.menuScreen == menuMapSelect {
+			mapItems := make([]ui.MenuItem, len(m.maps))
+			for i, gm := range m.maps {
+				mapItems[i] = ui.MenuItem{Label: gm.Name, Key: gm.ID}
+			}
+			menuView = ui.RenderMapSelect(mapItems, m.menuSelected)
+		} else {
+			menuView = ui.RenderMenu(mainMenuItems, m.menuSelected)
+		}
 		return lipgloss.Place(m.width, m.height,
 			lipgloss.Center, lipgloss.Center,
-			ui.RenderMenu(menuItems, m.menuSelected))
+			menuView)
 
 	case screenHelp:
 		return lipgloss.Place(m.width, m.height,
@@ -386,7 +446,7 @@ func (m Model) View() string {
 	case screenGameOver:
 		return lipgloss.Place(m.width, m.height,
 			lipgloss.Center, lipgloss.Center,
-			ui.RenderGameOver(m.score, m.width, m.height))
+			ui.RenderGameOver(m.score))
 
 	case screenPlaying:
 		return m.renderPlaying()
@@ -399,7 +459,7 @@ func (m Model) renderPlaying() string {
 	planes := m.sortedAircraft()
 
 	hud := ui.RenderHUD(m.score, len(planes), m.elapsed, m.messages)
-	radarView := radar.Render(radarW, radarH, m.runway, planes)
+	radarView := radar.Render(m.gameMap, planes)
 	sidebar := radar.RenderSidebar(planes)
 	gameArea := lipgloss.JoinHorizontal(lipgloss.Top, radarView, " ", sidebar)
 
@@ -407,6 +467,16 @@ func (m Model) renderPlaying() string {
 	inputView := prompt + m.input.View()
 
 	return lipgloss.JoinVertical(lipgloss.Left, hud, gameArea, "", inputView)
+}
+
+const maxStoredMessages = 50
+
+func (m Model) addMessage(msg string) Model {
+	m.messages = append(m.messages, msg)
+	if len(m.messages) > maxStoredMessages {
+		m.messages = m.messages[len(m.messages)-maxStoredMessages:]
+	}
+	return m
 }
 
 func (m Model) sortedAircraft() []aircraft.Aircraft {

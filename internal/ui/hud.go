@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const maxMessages = 5
+const maxDisplayMessages = 5
 
 // RenderHUD builds the heads-up display with score, aircraft count, and elapsed time.
 func RenderHUD(score int, aircraftCount int, elapsed time.Duration, messages []string) string {
@@ -20,8 +20,8 @@ func RenderHUD(score int, aircraftCount int, elapsed time.Duration, messages []s
 
 	// Recent messages
 	start := 0
-	if len(messages) > maxMessages {
-		start = len(messages) - maxMessages
+	if len(messages) > maxDisplayMessages {
+		start = len(messages) - maxDisplayMessages
 	}
 	for _, msg := range messages[start:] {
 		sb.WriteString(Dim.Render(msg) + "\n")
@@ -62,7 +62,7 @@ func RenderPaused(score int, elapsed time.Duration) string {
 }
 
 // RenderGameOver builds the game over overlay.
-func RenderGameOver(score int, width, height int) string {
+func RenderGameOver(score int) string {
 	title := GameOverTitle.Render(" GAME OVER ")
 	scoreStr := GameOverScore.Render(fmt.Sprintf("Final Score: %d", score))
 	restart := Dim.Render("R restart  |  Esc menu  |  Q quit")

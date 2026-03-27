@@ -17,8 +17,8 @@ type Spawner struct {
 }
 
 // NewSpawner creates a spawner with a seeded random source.
-func NewSpawner(seed int64) Spawner {
-	return Spawner{
+func NewSpawner(seed int64) *Spawner {
+	return &Spawner{
 		rng:          rand.New(rand.NewSource(seed)),
 		baseInterval: 5 * time.Second,
 	}
@@ -40,7 +40,7 @@ func (s *Spawner) ShouldSpawn(elapsed time.Duration, currentCount int) bool {
 	return false
 }
 
-func (s Spawner) spawnInterval(elapsed time.Duration) time.Duration {
+func (s *Spawner) spawnInterval(elapsed time.Duration) time.Duration {
 	minutes := elapsed.Minutes()
 	// Start at 5s, decrease to 1.5s over 5 minutes
 	interval := 5.0 - (minutes * 0.7)
@@ -50,7 +50,7 @@ func (s Spawner) spawnInterval(elapsed time.Duration) time.Duration {
 	return time.Duration(interval * float64(time.Second))
 }
 
-func (s Spawner) maxAircraft(elapsed time.Duration) int {
+func (s *Spawner) maxAircraft(elapsed time.Duration) int {
 	minutes := elapsed.Minutes()
 	// Start at 5, increase to 15 over 5 minutes
 	max := 5 + int(minutes*2)
@@ -66,36 +66,30 @@ func (s *Spawner) Spawn(width, height int) Aircraft {
 	edge := s.rng.Intn(4) // 0=N, 1=E, 2=S, 3=W
 
 	var x, y float64
-	var heading int
-
-	centerX := float64(width) / 2
-	centerY := float64(height) / 2
 
 	switch edge {
 	case 0: // North
 		x = float64(s.rng.Intn(width))
 		y = 0
-		heading = 135 + s.rng.Intn(90) // roughly south-ish
 	case 1: // East
 		x = float64(width - 1)
 		y = float64(s.rng.Intn(height))
-		heading = 225 + s.rng.Intn(90) // roughly west-ish
 	case 2: // South
 		x = float64(s.rng.Intn(width))
 		y = float64(height - 1)
-		heading = (315 + s.rng.Intn(90)) % 360 // roughly north-ish
 	case 3: // West
 		x = 0
 		y = float64(s.rng.Intn(height))
-		heading = 45 + s.rng.Intn(90) // roughly east-ish
 	}
 
-	// Bias heading toward center
+	// Heading biased toward center +/- 20 degrees of randomness
+	centerX := float64(width) / 2
+	centerY := float64(height) / 2
 	toCenter := math.Atan2(centerX-x, -(centerY-y)) * 180 / math.Pi
 	if toCenter < 0 {
 		toCenter += 360
 	}
-	heading = int(toCenter) + (s.rng.Intn(40) - 20) // +/- 20 degree randomness
+	heading := int(toCenter) + (s.rng.Intn(40) - 20)
 	heading = ((heading % 360) + 360) % 360
 
 	altitude := 5 + s.rng.Intn(16) // 5000-20000ft

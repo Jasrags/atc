@@ -13,10 +13,6 @@ var (
 			Foreground(lipgloss.Color("82")).
 			Bold(true)
 
-	AircraftSelected = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("226")).
-				Bold(true)
-
 	AircraftLanding = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("214")).
 			Bold(true)
@@ -27,7 +23,12 @@ var (
 
 	// Runway
 	RunwayStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("245"))
+			Foreground(lipgloss.Color("252")).
+			Bold(true)
+
+	// Navigation fixes
+	FixStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("73"))
 
 	// HUD
 	HUDTitle = lipgloss.NewStyle().

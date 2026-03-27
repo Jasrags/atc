@@ -38,3 +38,25 @@ func RenderMenu(items []MenuItem, selected int) string {
 
 	return HelpBox.Render(sb.String())
 }
+
+// RenderMapSelect builds the map selection screen.
+func RenderMapSelect(maps []MenuItem, selected int) string {
+	var sb strings.Builder
+
+	sb.WriteString(HelpTitle.Render("  SELECT MAP  ") + "\n\n")
+
+	for i, item := range maps {
+		cursor := "  "
+		style := HelpDesc
+		if i == selected {
+			cursor = "> "
+			style = HUDScore
+		}
+		sb.WriteString(style.Render(cursor+item.Label) + "\n")
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(Dim.Render("  Enter to start, Esc to go back") + "\n")
+
+	return HelpBox.Render(sb.String())
+}

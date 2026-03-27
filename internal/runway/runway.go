@@ -1,6 +1,10 @@
 package runway
 
-import "math"
+import (
+	"math"
+
+	hdg "github.com/Jasrags/atc/internal/heading"
+)
 
 // Runway represents an airport runway on the radar display.
 type Runway struct {
@@ -33,15 +37,7 @@ func (r Runway) CanLand(x, y int, heading, altitude int) bool {
 		return false
 	}
 
-	headingDiff := headingDelta(heading, r.Heading)
-	return math.Abs(float64(headingDiff)) <= 10
-}
-
-// headingDelta returns the shortest signed difference between two headings.
-// Positive means clockwise from a to b, negative means counter-clockwise.
-func headingDelta(a, b int) int {
-	diff := ((b - a + 540) % 360) - 180
-	return diff
+	return hdg.AbsDelta(heading, r.Heading) <= 10
 }
 
 // Cells returns the grid cells occupied by the runway for rendering.

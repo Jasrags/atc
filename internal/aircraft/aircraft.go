@@ -1,6 +1,10 @@
 package aircraft
 
-import "math"
+import (
+	"math"
+
+	"github.com/Jasrags/atc/internal/heading"
+)
 
 // State represents the current state of an aircraft.
 type State int
@@ -81,16 +85,23 @@ func (a Aircraft) Tick() Aircraft {
 	return next
 }
 
-const turnRate = 3 // degrees per tick
+const (
+	turnRate       = 3   // degrees per tick
+	gridSpeedScale = 0.3 // grid cells per tick per speed unit
+)
 
 func (a Aircraft) interpolateHeading() Aircraft {
 	if a.Heading == a.TargetHeading {
 		return a
 	}
 	next := a
-	delta := headingDelta(a.Heading, a.TargetHeading)
+	delta := heading.Delta(a.Heading, a.TargetHeading)
 
-	if abs(delta) <= turnRate {
+	absDelta := delta
+	if absDelta < 0 {
+		absDelta = -absDelta
+	}
+	if absDelta <= turnRate {
 		next.Heading = a.TargetHeading
 	} else if delta > 0 {
 		next.Heading = (a.Heading + turnRate) % 360
@@ -129,22 +140,10 @@ func (a Aircraft) interpolateSpeed() Aircraft {
 func (a Aircraft) move() Aircraft {
 	next := a
 	rad := float64(a.Heading) * math.Pi / 180.0
-	speed := float64(a.Speed) * 0.3 // scale factor for grid movement
+	speed := float64(a.Speed) * gridSpeedScale
 	next.X += speed * math.Sin(rad)
 	next.Y -= speed * math.Cos(rad)
 	return next
-}
-
-// headingDelta returns the shortest signed difference from heading a to heading b.
-func headingDelta(a, b int) int {
-	return ((b - a + 540) % 360) - 180
-}
-
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
 }
 
 // IsOffScreen reports whether the aircraft has left the radar area.

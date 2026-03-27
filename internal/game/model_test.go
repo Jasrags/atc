@@ -8,6 +8,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// newPlayingModel returns a model in the playing state for tests.
+func newPlayingModel() Model {
+	m := NewModel()
+	m.width, m.height = 100, 50
+	started, _ := m.startGame()
+	return started
+}
+
 func TestNewModelStartsAtMenu(t *testing.T) {
 	m := NewModel()
 	if m.screen != screenMenu {
@@ -41,11 +49,25 @@ func TestMenuNavigation(t *testing.T) {
 	}
 }
 
-func TestMenuStartGame(t *testing.T) {
+func TestMenuNewGameGoesToMapSelect(t *testing.T) {
 	m := NewModel()
 	m.width, m.height = 100, 50
 
-	// Select "New Game" and press enter
+	// Press enter on "New Game" -> map select
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+
+	if model.menuScreen != menuMapSelect {
+		t.Errorf("expected menuMapSelect, got %d", model.menuScreen)
+	}
+}
+
+func TestMapSelectStartsGame(t *testing.T) {
+	m := NewModel()
+	m.width, m.height = 100, 50
+	m.menuScreen = menuMapSelect
+
+	// Press enter on first map
 	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	model := result.(Model)
 
@@ -57,18 +79,16 @@ func TestMenuStartGame(t *testing.T) {
 	}
 }
 
-func TestMenuStartGameShortcut(t *testing.T) {
+func TestMapSelectEscGoesBack(t *testing.T) {
 	m := NewModel()
 	m.width, m.height = 100, 50
+	m.menuScreen = menuMapSelect
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEscape})
 	model := result.(Model)
 
-	if model.screen != screenPlaying {
-		t.Errorf("expected screenPlaying, got %d", model.screen)
-	}
-	if cmd == nil {
-		t.Error("expected init commands")
+	if model.menuScreen != menuMain {
+		t.Errorf("expected menuMain, got %d", model.menuScreen)
 	}
 }
 
@@ -190,10 +210,8 @@ func TestPauseEscGoesToMenu(t *testing.T) {
 }
 
 func TestPauseStopsTick(t *testing.T) {
-	m := NewModel()
-	m.width, m.height = 100, 50
+	m := newPlayingModel()
 	m.screen = screenPaused
-	m.started = true
 
 	ac := aircraft.New("AA1", 30, 15, 90, 5, 3)
 	m.aircraft["AA1"] = ac
@@ -210,9 +228,7 @@ func TestPauseStopsTick(t *testing.T) {
 }
 
 func TestTickAdvancesAircraft(t *testing.T) {
-	m := NewModel()
-	m.width, m.height = 100, 50
-	m.screen = screenPlaying
+	m := newPlayingModel()
 
 	ac := aircraft.New("AA123", 30, 15, 90, 5, 3)
 	m.aircraft["AA123"] = ac
@@ -231,11 +247,7 @@ func TestTickAdvancesAircraft(t *testing.T) {
 }
 
 func TestCollisionEndsGame(t *testing.T) {
-	m := NewModel()
-	m.width, m.height = 100, 50
-	m.screen = screenPlaying
-	m.started = true
-	m.startTime = time.Now()
+	m := newPlayingModel()
 
 	m.aircraft["AA1"] = aircraft.New("AA1", 30, 15, 0, 5, 1)
 	m.aircraft["AA2"] = aircraft.New("AA2", 30, 15, 0, 5, 1)
@@ -252,13 +264,10 @@ func TestCollisionEndsGame(t *testing.T) {
 }
 
 func TestLandingScores(t *testing.T) {
-	m := NewModel()
-	m.width, m.height = 100, 50
-	m.screen = screenPlaying
-	m.started = true
-	m.startTime = time.Now()
+	m := newPlayingModel()
 
-	ac := aircraft.New("AA1", float64(m.runway.X), float64(m.runway.Y), m.runway.Heading, 1, 1)
+	rw := m.runways[0]
+	ac := aircraft.New("AA1", float64(rw.X), float64(rw.Y), rw.Heading, 1, 1)
 	ac.State = aircraft.Landing
 	m.aircraft["AA1"] = ac
 
