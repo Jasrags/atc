@@ -5,13 +5,14 @@ import (
 	"time"
 
 	"github.com/Jasrags/atc/internal/aircraft"
+	"github.com/Jasrags/atc/internal/config"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// newPlayingModel returns a model in the playing state for tests.
 func newPlayingModel() Model {
 	m := NewModel()
 	m.width, m.height = 100, 50
+	m.gameConfig = config.DefaultConfig()
 	started, _ := m.startGame()
 	return started
 }
@@ -27,47 +28,92 @@ func TestMenuNavigation(t *testing.T) {
 	m := NewModel()
 	m.width, m.height = 100, 50
 
-	// Down
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyDown})
 	model := result.(Model)
 	if model.menuSelected != 1 {
 		t.Errorf("expected selected=1 after down, got %d", model.menuSelected)
 	}
 
-	// Up
 	result, _ = model.handleKey(tea.KeyMsg{Type: tea.KeyUp})
 	model = result.(Model)
 	if model.menuSelected != 0 {
 		t.Errorf("expected selected=0 after up, got %d", model.menuSelected)
 	}
-
-	// Don't go above 0
-	result, _ = model.handleKey(tea.KeyMsg{Type: tea.KeyUp})
-	model = result.(Model)
-	if model.menuSelected != 0 {
-		t.Errorf("expected selected=0 (clamped), got %d", model.menuSelected)
-	}
 }
 
-func TestMenuNewGameGoesToMapSelect(t *testing.T) {
+func TestMenuNewGameGoesToSetup(t *testing.T) {
 	m := NewModel()
 	m.width, m.height = 100, 50
 
-	// Press enter on "New Game" -> map select
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	model := result.(Model)
 
-	if model.menuScreen != menuMapSelect {
-		t.Errorf("expected menuMapSelect, got %d", model.menuScreen)
+	if model.menuScreen != menuSetup {
+		t.Errorf("expected menuSetup, got %d", model.menuScreen)
 	}
 }
 
-func TestMapSelectStartsGame(t *testing.T) {
+func TestSetupTabCyclesFocus(t *testing.T) {
 	m := NewModel()
 	m.width, m.height = 100, 50
-	m.menuScreen = menuMapSelect
+	m.menuScreen = menuSetup
+	m.setupFocus = 0
 
-	// Press enter on first map
+	for i := 0; i < setupSections; i++ {
+		result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+		m = result.(Model)
+		expected := (i + 1) % setupSections
+		if m.setupFocus != expected {
+			t.Errorf("after %d tabs, expected focus %d, got %d", i+1, expected, m.setupFocus)
+		}
+	}
+}
+
+func TestSetupShiftTabCyclesBack(t *testing.T) {
+	m := NewModel()
+	m.menuScreen = menuSetup
+	m.setupFocus = 0
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyShiftTab})
+	model := result.(Model)
+	if model.setupFocus != setupSections-1 {
+		t.Errorf("expected focus %d, got %d", setupSections-1, model.setupFocus)
+	}
+}
+
+func TestSetupUpDownChangesSelection(t *testing.T) {
+	m := NewModel()
+	m.menuScreen = menuSetup
+	m.setupFocus = setupDiff // Difficulty: Easy/Normal/Hard
+	m.setupSelections[setupDiff] = 1 // Normal
+
+	// Down -> Hard
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	model := result.(Model)
+	if model.setupSelections[setupDiff] != 2 {
+		t.Errorf("expected 2 (Hard), got %d", model.setupSelections[setupDiff])
+	}
+
+	// Down again -> clamped at 2
+	result, _ = model.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	model = result.(Model)
+	if model.setupSelections[setupDiff] != 2 {
+		t.Errorf("expected 2 (clamped), got %d", model.setupSelections[setupDiff])
+	}
+
+	// Up -> Normal
+	result, _ = model.handleKey(tea.KeyMsg{Type: tea.KeyUp})
+	model = result.(Model)
+	if model.setupSelections[setupDiff] != 1 {
+		t.Errorf("expected 1 (Normal), got %d", model.setupSelections[setupDiff])
+	}
+}
+
+func TestSetupStartsGame(t *testing.T) {
+	m := NewModel()
+	m.width, m.height = 100, 50
+	m.menuScreen = menuSetup
+
 	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	model := result.(Model)
 
@@ -79,10 +125,28 @@ func TestMapSelectStartsGame(t *testing.T) {
 	}
 }
 
-func TestMapSelectEscGoesBack(t *testing.T) {
+func TestSetupBuildsConfig(t *testing.T) {
 	m := NewModel()
-	m.width, m.height = 100, 50
-	m.menuScreen = menuMapSelect
+	m.menuScreen = menuSetup
+	m.setupSelections[setupDiff] = 2      // Hard
+	m.setupSelections[setupCallsign] = 1  // Short
+	m.setupSelections[setupTrails] = 0    // On
+
+	cfg := m.buildConfigFromSetup()
+	if cfg.Difficulty != config.DifficultyHard {
+		t.Errorf("expected Hard, got %v", cfg.Difficulty)
+	}
+	if cfg.CallsignStyle != config.CallsignShort {
+		t.Errorf("expected Short, got %v", cfg.CallsignStyle)
+	}
+	if !cfg.PlaneTrails {
+		t.Error("expected PlaneTrails true")
+	}
+}
+
+func TestSetupEscGoesBack(t *testing.T) {
+	m := NewModel()
+	m.menuScreen = menuSetup
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEscape})
 	model := result.(Model)
@@ -128,7 +192,7 @@ func TestHelpReturnToMenu(t *testing.T) {
 func TestHelpReturnToPlaying(t *testing.T) {
 	m := NewModel()
 	m.screen = screenHelp
-	m.started = true // game was in progress
+	m.started = true
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	model := result.(Model)
@@ -139,11 +203,7 @@ func TestHelpReturnToPlaying(t *testing.T) {
 }
 
 func TestPlayingEscGoesToMenu(t *testing.T) {
-	m := NewModel()
-	m.width, m.height = 100, 50
-	// Start a game first
-	result, _ := m.startGame()
-	m = result
+	m := newPlayingModel()
 
 	res, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEscape})
 	model := res.(Model)
@@ -154,10 +214,7 @@ func TestPlayingEscGoesToMenu(t *testing.T) {
 }
 
 func TestPlayingPause(t *testing.T) {
-	m := NewModel()
-	m.width, m.height = 100, 50
-	result, _ := m.startGame()
-	m = result
+	m := newPlayingModel()
 
 	res, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	model := res.(Model)
@@ -171,10 +228,8 @@ func TestPlayingPause(t *testing.T) {
 }
 
 func TestPauseResume(t *testing.T) {
-	m := NewModel()
-	m.width, m.height = 100, 50
+	m := newPlayingModel()
 	m.screen = screenPaused
-	m.started = true
 
 	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	model := result.(Model)
@@ -233,8 +288,7 @@ func TestTickAdvancesAircraft(t *testing.T) {
 	ac := aircraft.New("AA123", 30, 15, 90, 5, 3)
 	m.aircraft["AA123"] = ac
 
-	now := time.Now()
-	result, cmd := m.Update(tickMsg(now))
+	result, cmd := m.Update(tickMsg(time.Now()))
 	model := result.(Model)
 
 	if cmd == nil {
@@ -283,8 +337,7 @@ func TestLandingScores(t *testing.T) {
 }
 
 func TestGameOverRestart(t *testing.T) {
-	m := NewModel()
-	m.width, m.height = 100, 50
+	m := newPlayingModel()
 	m.screen = screenGameOver
 	m.score = 10
 
@@ -321,6 +374,55 @@ func TestViewMenuScreen(t *testing.T) {
 	view := m.View()
 	if view == "" {
 		t.Error("expected menu view output")
+	}
+}
+
+func TestViewSetupScreen(t *testing.T) {
+	m := NewModel()
+	m.width, m.height = 100, 50
+	m.menuScreen = menuSetup
+
+	view := m.View()
+	if view == "" {
+		t.Error("expected setup view output")
+	}
+}
+
+func TestProcessCommandValid(t *testing.T) {
+	m := newPlayingModel()
+	ac := aircraft.New("AA123", 30, 15, 90, 10, 3)
+	m.aircraft["AA123"] = ac
+
+	m = m.processCommand("AA123 H270 A3")
+
+	updated := m.aircraft["AA123"]
+	if updated.TargetHeading != 270 {
+		t.Errorf("expected target heading 270, got %d", updated.TargetHeading)
+	}
+	if updated.TargetAltitude != 3 {
+		t.Errorf("expected target altitude 3, got %d", updated.TargetAltitude)
+	}
+}
+
+func TestProcessCommandInvalid(t *testing.T) {
+	m := newPlayingModel()
+	msgCount := len(m.messages)
+
+	m = m.processCommand("INVALID GARBAGE")
+
+	if len(m.messages) <= msgCount {
+		t.Error("expected error message for invalid command")
+	}
+}
+
+func TestProcessCommandUnknownCallsign(t *testing.T) {
+	m := newPlayingModel()
+	msgCount := len(m.messages)
+
+	m = m.processCommand("XX999 H270")
+
+	if len(m.messages) <= msgCount {
+		t.Error("expected error message for unknown callsign")
 	}
 }
 

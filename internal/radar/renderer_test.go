@@ -57,24 +57,55 @@ func TestRenderWithAircraft(t *testing.T) {
 	}
 }
 
-func TestRenderSidebarEmpty(t *testing.T) {
-	result := RenderSidebar(nil)
+func TestRenderFlightStripsEmpty(t *testing.T) {
+	result := RenderFlightStrips(nil)
 	if !strings.Contains(result, "No aircraft") {
-		t.Error("expected 'No aircraft' for empty sidebar")
+		t.Error("expected 'No aircraft' for empty strips")
 	}
 }
 
-func TestRenderSidebarWithAircraft(t *testing.T) {
+func TestRenderFlightStripsWithAircraft(t *testing.T) {
 	planes := []aircraft.Aircraft{
 		aircraft.New("UA456", 10, 10, 180, 8, 3),
 	}
-	result := RenderSidebar(planes)
+	result := RenderFlightStrips(planes)
 
 	if !strings.Contains(result, "UA456") {
-		t.Error("expected callsign in sidebar")
+		t.Error("expected callsign in flight strip")
 	}
 	if !strings.Contains(result, "180") {
-		t.Error("expected heading in sidebar")
+		t.Error("expected heading in flight strip")
+	}
+	if !strings.Contains(result, "APPR") {
+		t.Error("expected state in flight strip")
+	}
+}
+
+func TestRenderFlightStripsShowsTargets(t *testing.T) {
+	ac := aircraft.New("AA1", 30, 15, 90, 10, 3)
+	ac.TargetHeading = 270
+	ac.TargetAltitude = 3
+	planes := []aircraft.Aircraft{ac}
+
+	result := RenderFlightStrips(planes)
+
+	if !strings.Contains(result, "H270") {
+		t.Error("expected target heading H270 in flight strip")
+	}
+	if !strings.Contains(result, "A3") {
+		t.Error("expected target altitude A3 in flight strip")
+	}
+}
+
+func TestRenderFlightStripsAltitudeArrow(t *testing.T) {
+	ac := aircraft.New("AA1", 30, 15, 90, 10, 3)
+	ac.TargetAltitude = 5 // descending
+	planes := []aircraft.Aircraft{ac}
+
+	result := RenderFlightStrips(planes)
+
+	if !strings.Contains(result, "↓") {
+		t.Error("expected descend arrow in flight strip")
 	}
 }
 

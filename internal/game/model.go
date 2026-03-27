@@ -9,6 +9,7 @@ import (
 	"github.com/Jasrags/atc/internal/aircraft"
 	"github.com/Jasrags/atc/internal/collision"
 	"github.com/Jasrags/atc/internal/command"
+	"github.com/Jasrags/atc/internal/config"
 	"github.com/Jasrags/atc/internal/gamemap"
 	"github.com/Jasrags/atc/internal/radar"
 	"github.com/Jasrags/atc/internal/runway"
@@ -37,7 +38,17 @@ type menuScreen int
 
 const (
 	menuMain menuScreen = iota
-	menuMapSelect
+	menuSetup
+)
+
+// Setup section indices
+const (
+	setupMap       = 0
+	setupDiff      = 1
+	setupMode      = 2
+	setupCallsign  = 3
+	setupTrails    = 4
+	setupSections  = 5
 )
 
 var mainMenuItems = []ui.MenuItem{
@@ -48,23 +59,26 @@ var mainMenuItems = []ui.MenuItem{
 
 // Model is the top-level bubbletea model for the ATC game.
 type Model struct {
-	screen       screen
-	menuScreen   menuScreen
-	menuSelected int
-	maps         []gamemap.Map
-	gameMap      gamemap.Map
-	aircraft   map[string]aircraft.Aircraft
-	runways    []runway.Runway
-	spawner      *aircraft.Spawner
-	input        textinput.Model
-	score        int
-	messages     []string
-	width        int
-	height       int
-	elapsed      time.Duration
-	startTime    time.Time
-	pauseElapsed time.Duration
-	started      bool
+	screen          screen
+	menuScreen      menuScreen
+	menuSelected    int
+	maps            []gamemap.Map
+	gameMap         gamemap.Map
+	gameConfig      config.GameConfig
+	setupFocus      int
+	setupSelections [setupSections]int
+	aircraft        map[string]aircraft.Aircraft
+	runways         []runway.Runway
+	spawner         *aircraft.Spawner
+	input           textinput.Model
+	score           int
+	messages        []string
+	width           int
+	height          int
+	elapsed         time.Duration
+	startTime       time.Time
+	pauseElapsed    time.Duration
+	started         bool
 }
 
 // NewModel creates a new model starting at the main menu.
@@ -74,12 +88,21 @@ func NewModel() Model {
 		panic("gamemap.All returned no maps")
 	}
 	gm := maps[0]
+	cfg := config.DefaultConfig()
 	return Model{
-		screen:   screenMenu,
-		maps:     maps,
-		gameMap:  gm,
-		aircraft: make(map[string]aircraft.Aircraft),
-		runways:  buildRunways(gm),
+		screen:     screenMenu,
+		maps:       maps,
+		gameMap:    gm,
+		gameConfig: cfg,
+		aircraft:   make(map[string]aircraft.Aircraft),
+		runways:    buildRunways(gm),
+		setupSelections: [setupSections]int{
+			0, // map: first
+			1, // difficulty: Normal
+			0, // mode: Arrivals Only
+			0, // callsign: ICAO
+			1, // trails: Off
+		},
 	}
 }
 
@@ -119,7 +142,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Global quit
 	if msg.String() == "ctrl+c" {
 		return m, tea.Quit
 	}
@@ -143,8 +165,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // --- Menu ---
 
 func (m Model) handleMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.menuScreen == menuMapSelect {
-		return m.handleMapSelectKey(msg)
+	if m.menuScreen == menuSetup {
+		return m.handleSetupKey(msg)
 	}
 
 	switch msg.String() {
@@ -161,8 +183,8 @@ func (m Model) handleMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q", "esc":
 		return m, tea.Quit
 	case "n":
-		m.menuScreen = menuMapSelect
-		m.menuSelected = 0
+		m.menuScreen = menuSetup
+		m.setupFocus = 0
 	case "h", "?":
 		m.screen = screenHelp
 	}
@@ -172,8 +194,8 @@ func (m Model) handleMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) selectMainMenuItem() (tea.Model, tea.Cmd) {
 	switch mainMenuItems[m.menuSelected].Key {
 	case "n":
-		m.menuScreen = menuMapSelect
-		m.menuSelected = 0
+		m.menuScreen = menuSetup
+		m.setupFocus = 0
 		return m, nil
 	case "h":
 		m.screen = screenHelp
@@ -184,18 +206,42 @@ func (m Model) selectMainMenuItem() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleMapSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// --- Setup ---
+
+func (m Model) setupSectionMax(section int) int {
+	switch section {
+	case setupMap:
+		return len(m.maps) - 1
+	case setupDiff:
+		return len(config.DifficultyOptions()) - 1
+	case setupMode:
+		return len(config.GameModeOptions()) - 1
+	case setupCallsign:
+		return len(config.CallsignStyleOptions()) - 1
+	case setupTrails:
+		return len(config.PlaneTrailsOptions()) - 1
+	}
+	return 0
+}
+
+func (m Model) handleSetupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
+	case "tab":
+		m.setupFocus = (m.setupFocus + 1) % setupSections
+	case "shift+tab":
+		m.setupFocus = (m.setupFocus - 1 + setupSections) % setupSections
 	case "up", "k":
-		if m.menuSelected > 0 {
-			m.menuSelected--
+		if m.setupSelections[m.setupFocus] > 0 {
+			m.setupSelections[m.setupFocus]--
 		}
 	case "down", "j":
-		if m.menuSelected < len(m.maps)-1 {
-			m.menuSelected++
+		max := m.setupSectionMax(m.setupFocus)
+		if m.setupSelections[m.setupFocus] < max {
+			m.setupSelections[m.setupFocus]++
 		}
 	case "enter":
-		m.gameMap = m.maps[m.menuSelected]
+		m.gameConfig = m.buildConfigFromSetup()
+		m.gameMap = gamemap.ByID(m.gameConfig.MapID)
 		return m.startGame()
 	case "esc":
 		m.menuScreen = menuMain
@@ -203,6 +249,33 @@ func (m Model) handleMapSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
+
+func (m Model) buildConfigFromSetup() config.GameConfig {
+	return config.GameConfig{
+		MapID:         m.maps[m.setupSelections[setupMap]].ID,
+		Difficulty:    config.Difficulty(m.setupSelections[setupDiff]),
+		GameMode:      config.GameMode(m.setupSelections[setupMode]),
+		CallsignStyle: config.CallsignStyle(m.setupSelections[setupCallsign]),
+		PlaneTrails:   m.setupSelections[setupTrails] == 0, // 0=On, 1=Off
+	}
+}
+
+func (m Model) buildSetupSections() []ui.SetupSection {
+	mapNames := make([]string, len(m.maps))
+	for i, gm := range m.maps {
+		mapNames[i] = gm.Name
+	}
+
+	return []ui.SetupSection{
+		{Title: "Map", Options: mapNames, Selected: m.setupSelections[setupMap]},
+		{Title: "Difficulty", Options: config.DifficultyOptions(), Selected: m.setupSelections[setupDiff]},
+		{Title: "Game Mode", Options: config.GameModeOptions(), Selected: m.setupSelections[setupMode]},
+		{Title: "Callsign Style", Options: config.CallsignStyleOptions(), Selected: m.setupSelections[setupCallsign]},
+		{Title: "Plane Trails", Options: config.PlaneTrailsOptions(), Selected: m.setupSelections[setupTrails]},
+	}
+}
+
+// --- Start Game ---
 
 func (m Model) startGame() (Model, tea.Cmd) {
 	ti := textinput.New()
@@ -214,7 +287,7 @@ func (m Model) startGame() (Model, tea.Cmd) {
 	m.screen = screenPlaying
 	m.aircraft = make(map[string]aircraft.Aircraft)
 	m.runways = buildRunways(m.gameMap)
-	m.spawner = aircraft.NewSpawner(time.Now().UnixNano())
+	m.spawner = aircraft.NewSpawner(time.Now().UnixNano(), m.gameConfig)
 	m.input = ti
 	m.score = 0
 	m.messages = []string{ui.FormatInfo(fmt.Sprintf("Welcome to %s! Type ? for help.", m.gameMap.Name))}
@@ -332,14 +405,8 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if !m.started {
-		m.started = true
-		m.startTime = time.Time(msg)
-	}
-
 	m.elapsed = time.Time(msg).Sub(m.startTime)
 
-	// Advance all aircraft
 	newAircraft := make(map[string]aircraft.Aircraft, len(m.aircraft))
 	for k, ac := range m.aircraft {
 		next := ac.Tick()
@@ -349,7 +416,6 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 	}
 	m.aircraft = newAircraft
 
-	// Check collisions
 	collisions := collision.Check(m.aircraft)
 	if len(collisions) > 0 {
 		for _, c := range collisions {
@@ -368,31 +434,26 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Check landings against all runways
+	// Check landings and build new map excluding landed aircraft
+	activeAircraft := make(map[string]aircraft.Aircraft, len(m.aircraft))
 	for k, ac := range m.aircraft {
-		if ac.State != aircraft.Landing {
-			continue
-		}
-		for _, rw := range m.runways {
-			if rw.CanLand(ac.GridX(), ac.GridY(), ac.Heading, ac.Altitude) {
-				ac.State = aircraft.Landed
-				m.aircraft[k] = ac
-				m.score++
-				m = m.addMessage(
-					ui.FormatSuccess(fmt.Sprintf("%s landed safely! Score: %d", ac.Callsign, m.score)))
-				break
+		if ac.State == aircraft.Landing {
+			for _, rw := range m.runways {
+				if rw.CanLand(ac.GridX(), ac.GridY(), ac.Heading, ac.Altitude) {
+					ac.State = aircraft.Landed
+					m.score++
+					m = m.addMessage(
+						ui.FormatSuccess(fmt.Sprintf("%s landed safely! Score: %d", ac.Callsign, m.score)))
+					break
+				}
 			}
 		}
-	}
-
-	// Remove landed aircraft
-	for k, ac := range m.aircraft {
-		if ac.State == aircraft.Landed {
-			delete(m.aircraft, k)
+		if ac.State != aircraft.Landed {
+			activeAircraft[k] = ac
 		}
 	}
+	m.aircraft = activeAircraft
 
-	// Spawn new aircraft
 	if m.spawner.ShouldSpawn(m.elapsed, len(m.aircraft)) {
 		ac := m.spawner.Spawn(m.gameMap.Width, m.gameMap.Height)
 		if _, exists := m.aircraft[ac.Callsign]; !exists {
@@ -420,12 +481,8 @@ func (m Model) View() string {
 	switch m.screen {
 	case screenMenu:
 		var menuView string
-		if m.menuScreen == menuMapSelect {
-			mapItems := make([]ui.MenuItem, len(m.maps))
-			for i, gm := range m.maps {
-				mapItems[i] = ui.MenuItem{Label: gm.Name, Key: gm.ID}
-			}
-			menuView = ui.RenderMapSelect(mapItems, m.menuSelected)
+		if m.menuScreen == menuSetup {
+			menuView = ui.RenderSetup(m.buildSetupSections(), m.setupFocus)
 		} else {
 			menuView = ui.RenderMenu(mainMenuItems, m.menuSelected)
 		}
@@ -460,7 +517,7 @@ func (m Model) renderPlaying() string {
 
 	hud := ui.RenderHUD(m.score, len(planes), m.elapsed, m.messages)
 	radarView := radar.Render(m.gameMap, planes)
-	sidebar := radar.RenderSidebar(planes)
+	sidebar := radar.RenderFlightStrips(planes)
 	gameArea := lipgloss.JoinHorizontal(lipgloss.Top, radarView, " ", sidebar)
 
 	prompt := ui.InputPrompt.Render("ATC> ")

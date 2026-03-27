@@ -17,6 +17,7 @@ func Render(gm gamemap.Map, planes []aircraft.Aircraft) string {
 	for _, rw := range gm.Runways {
 		placeRunway(grid, gm.Width, gm.Height, rw)
 	}
+	placeTrails(grid, gm.Width, gm.Height, planes)
 	placeAircraft(grid, gm.Width, gm.Height, planes)
 	return renderGrid(grid, gm.Width, gm.Height)
 }
@@ -129,6 +130,20 @@ func runwayCells(rw gamemap.Runway) [][2]int {
 	return cells
 }
 
+func placeTrails(grid [][]rune, width, height int, planes []aircraft.Aircraft) {
+	for _, ac := range planes {
+		if ac.State == aircraft.Landed || len(ac.Trail) == 0 {
+			continue
+		}
+		for _, pos := range ac.Trail {
+			x, y := pos[0], pos[1]
+			if x >= 0 && x < width && y >= 0 && y < height && grid[y][x] == ' ' {
+				grid[y][x] = '.'
+			}
+		}
+	}
+}
+
 func placeAircraft(grid [][]rune, width, height int, planes []aircraft.Aircraft) {
 	for _, ac := range planes {
 		if ac.State == aircraft.Landed {
@@ -178,6 +193,8 @@ func renderGrid(grid [][]rune, width, height int) string {
 				sb.WriteString(ui.RunwayStyle.Render(string(ch)))
 			case '^', 'o', '*', '+':
 				sb.WriteString(ui.FixStyle.Render(string(ch)))
+			case '.':
+				sb.WriteString(ui.Dim.Render("."))
 			default:
 				sb.WriteRune(ch)
 			}
@@ -190,34 +207,80 @@ func renderGrid(grid [][]rune, width, height int) string {
 	return sb.String()
 }
 
-// RenderSidebar builds the aircraft info panel.
-func RenderSidebar(planes []aircraft.Aircraft) string {
+// RenderFlightStrips builds the flight strip panel showing each aircraft's status.
+// Each strip shows: callsign, heading, altitude (with climb/descend arrow), speed, and state.
+// Format inspired by ATC-SIM progress strips.
+func RenderFlightStrips(planes []aircraft.Aircraft) string {
 	if len(planes) == 0 {
-		return ui.SidebarBox.Render(ui.Dim.Render("No aircraft"))
+		return ui.SidebarBox.Render(ui.Dim.Render("  No aircraft in airspace"))
 	}
 
 	var sb strings.Builder
-	sb.WriteString(ui.SidebarTitle.Render("  AIRCRAFT  ") + "\n")
-	sb.WriteString(fmt.Sprintf(" %-6s %3s %3s %1s %4s\n", "CALL", "HDG", "ALT", "S", "ST"))
-	sb.WriteString(strings.Repeat("-", 24) + "\n")
+	sb.WriteString(ui.SidebarTitle.Render(" FLIGHT STRIPS ") + "\n")
+	sb.WriteString(strings.Repeat("─", 28) + "\n")
 
 	for _, ac := range planes {
 		if ac.State == aircraft.Landed {
 			continue
 		}
-		line := fmt.Sprintf(" %-6s %03d  %02d %d %4s",
-			ac.Callsign, ac.Heading, ac.Altitude, ac.Speed, ac.State)
-
-		switch ac.State {
-		case aircraft.Landing:
-			sb.WriteString(ui.AircraftLanding.Render(line))
-		case aircraft.Crashed:
-			sb.WriteString(ui.AircraftCrashed.Render(line))
-		default:
-			sb.WriteString(line)
-		}
-		sb.WriteRune('\n')
+		strip := renderStrip(ac)
+		sb.WriteString(strip)
+		sb.WriteString(strings.Repeat("─", 28) + "\n")
 	}
 
 	return ui.SidebarBox.Render(sb.String())
+}
+
+func renderStrip(ac aircraft.Aircraft) string {
+	var sb strings.Builder
+
+	// Line 1: Callsign + State
+	callsign := fmt.Sprintf("%-6s", ac.Callsign)
+	state := ac.State.String()
+
+	switch ac.State {
+	case aircraft.Landing:
+		sb.WriteString(ui.AircraftLanding.Render(callsign))
+	case aircraft.Crashed:
+		sb.WriteString(ui.AircraftCrashed.Render(callsign))
+	default:
+		sb.WriteString(ui.AircraftNormal.Render(callsign))
+	}
+	sb.WriteString(strings.Repeat(" ", 16-len(callsign)-len(state)))
+	sb.WriteString(ui.Dim.Render(state))
+	sb.WriteRune('\n')
+
+	// Line 2: Heading + altitude arrow + altitude + speed
+	altArrow := " "
+	if ac.Altitude < ac.TargetAltitude {
+		altArrow = "↑"
+	} else if ac.Altitude > ac.TargetAltitude {
+		altArrow = "↓"
+	}
+
+	hdgStr := fmt.Sprintf("%03d", ac.Heading)
+	altStr := fmt.Sprintf("%s%02d", altArrow, ac.Altitude)
+	spdStr := fmt.Sprintf("S%d", ac.Speed)
+
+	sb.WriteString(ui.HUDInfo.Render(fmt.Sprintf(" %s  %s  %s", hdgStr, altStr, spdStr)))
+	sb.WriteRune('\n')
+
+	// Line 3: Target info (if different from current)
+	var targets []string
+	if ac.TargetHeading != ac.Heading {
+		targets = append(targets, fmt.Sprintf("H%03d", ac.TargetHeading))
+	}
+	if ac.TargetAltitude != ac.Altitude {
+		targets = append(targets, fmt.Sprintf("A%d", ac.TargetAltitude))
+	}
+	if ac.TargetSpeed != ac.Speed {
+		targets = append(targets, fmt.Sprintf("S%d", ac.TargetSpeed))
+	}
+
+	if len(targets) > 0 {
+		sb.WriteString(ui.Dim.Render(" → " + strings.Join(targets, " ")))
+	}
+	sb.WriteRune('\n')
+
+	return sb.String()
 }

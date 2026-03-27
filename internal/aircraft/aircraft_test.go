@@ -96,18 +96,23 @@ func TestTickAltitudeClimbDescend(t *testing.T) {
 	t.Run("climb", func(t *testing.T) {
 		ac := New("T1", 30, 30, 0, 5, 1)
 		ac.TargetAltitude = 10
-		next := ac.Tick()
-		if next.Altitude <= ac.Altitude {
-			t.Errorf("expected altitude increase, got %d -> %d", ac.Altitude, next.Altitude)
+		// Altitude changes are throttled; tick enough times
+		for i := 0; i < altTickRate+1; i++ {
+			ac = ac.Tick()
+		}
+		if ac.Altitude <= 5 {
+			t.Errorf("expected altitude increase after %d ticks, got %d", altTickRate+1, ac.Altitude)
 		}
 	})
 
 	t.Run("descend", func(t *testing.T) {
 		ac := New("T1", 30, 30, 0, 10, 1)
 		ac.TargetAltitude = 5
-		next := ac.Tick()
-		if next.Altitude >= ac.Altitude {
-			t.Errorf("expected altitude decrease, got %d -> %d", ac.Altitude, next.Altitude)
+		for i := 0; i < altTickRate+1; i++ {
+			ac = ac.Tick()
+		}
+		if ac.Altitude >= 10 {
+			t.Errorf("expected altitude decrease after %d ticks, got %d", altTickRate+1, ac.Altitude)
 		}
 	})
 }
@@ -115,9 +120,12 @@ func TestTickAltitudeClimbDescend(t *testing.T) {
 func TestTickSpeedChange(t *testing.T) {
 	ac := New("T1", 30, 30, 0, 5, 2)
 	ac.TargetSpeed = 5
-	next := ac.Tick()
-	if next.Speed <= ac.Speed {
-		t.Errorf("expected speed increase, got %d -> %d", ac.Speed, next.Speed)
+	// Speed changes are throttled; tick enough times
+	for i := 0; i < spdTickRate+1; i++ {
+		ac = ac.Tick()
+	}
+	if ac.Speed <= 2 {
+		t.Errorf("expected speed increase after %d ticks, got %d", spdTickRate+1, ac.Speed)
 	}
 }
 
@@ -127,6 +135,41 @@ func TestTickLandedDoesNotMove(t *testing.T) {
 	next := ac.Tick()
 	if next.X != ac.X || next.Y != ac.Y {
 		t.Error("landed aircraft should not move")
+	}
+}
+
+func TestTrailDisabledByDefault(t *testing.T) {
+	ac := New("T1", 30, 30, 90, 5, 3)
+	for i := 0; i < 10; i++ {
+		ac = ac.Tick()
+	}
+	if len(ac.Trail) != 0 {
+		t.Errorf("expected no trail when disabled, got %d entries", len(ac.Trail))
+	}
+}
+
+func TestTrailEnabledRecordsPositions(t *testing.T) {
+	ac := New("T1", 30, 30, 90, 5, 3)
+	ac.TrailEnabled = true
+
+	ac = ac.Tick()
+	if len(ac.Trail) != 1 {
+		t.Fatalf("expected 1 trail entry after first tick, got %d", len(ac.Trail))
+	}
+	if ac.Trail[0] != [2]int{30, 30} {
+		t.Errorf("expected trail at (30,30), got %v", ac.Trail[0])
+	}
+}
+
+func TestTrailCappedAtMaxLength(t *testing.T) {
+	ac := New("T1", 30, 30, 90, 5, 3)
+	ac.TrailEnabled = true
+
+	for i := 0; i < MaxTrailLength+10; i++ {
+		ac = ac.Tick()
+	}
+	if len(ac.Trail) != MaxTrailLength {
+		t.Errorf("expected trail length %d, got %d", MaxTrailLength, len(ac.Trail))
 	}
 }
 

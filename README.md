@@ -12,6 +12,14 @@ Aircraft appear at the edges of your radar screen flying toward the center. You 
 - **Successful landing** = +1 score
 - **Difficulty ramps** over time: more aircraft, faster spawns
 
+## Maps
+
+| Map | Size | Runways | Description |
+|-----|------|---------|-------------|
+| San Diego TRACON | 120x50 | 9/27 | Coastal approach with 16 nav fixes |
+| Chicago O'Hare | 120x50 | 10L/28R, 10R/28L | Parallel runway operations |
+| Tutorial | 90x40 | 9/27 | Small map for learning the basics |
+
 ## Installation
 
 ```bash
@@ -29,8 +37,22 @@ make build
 
 ## Requirements
 
-- Go 1.25+
-- Terminal with at least 60x24 cells
+- Go 1.26+
+- Terminal with at least 60x24 cells (larger recommended for full-size maps)
+
+## Game Setup
+
+When starting a new game, a setup screen lets you configure:
+
+| Setting | Options | Effect |
+|---------|---------|--------|
+| **Map** | San Diego, Chicago, Tutorial | Radar size, runways, nav fixes |
+| **Difficulty** | Easy / Normal / Hard | Spawn rate, max aircraft, speed range |
+| **Game Mode** | Arrivals Only | Traffic type |
+| **Callsign Style** | ICAO (AA123) / Short (A12) | Callsign format — short is faster to type |
+| **Plane Trails** | On / Off | Show last 5 positions as dots behind aircraft |
+
+Navigate with Tab (sections), Up/Down (options), Enter (start).
 
 ## Commands
 
@@ -57,6 +79,22 @@ To land an aircraft, it must be:
 - Heading within +/-10 degrees of the runway heading
 - At altitude 1 (1000ft)
 
+## Flight Strips
+
+The right panel shows flight strips for each aircraft:
+
+```
+──────────────────────────────
+AA123           APPR
+ 090  ↓08  S3
+ → H270 A3
+──────────────────────────────
+```
+
+- Line 1: Callsign (color-coded) + state (APPR/LAND/CRASH)
+- Line 2: Current heading, altitude with climb/descend arrow, speed
+- Line 3: Pending target commands (shown only when different from current)
+
 ## Keybindings
 
 | Key | Action |
@@ -64,15 +102,16 @@ To land an aircraft, it must be:
 | `Enter` | Submit command |
 | `P` | Pause / Resume |
 | `?` | Toggle help |
+| `Esc` | Back to menu |
 | `R` | Restart (game over screen) |
-| `Esc` / `Ctrl+C` | Quit |
+| `Ctrl+C` | Quit |
 
 ## Development
 
 ```bash
 make          # Format, vet, test, build
 make run      # Build and run
-make watch    # Live reload (requires air)
+make watch    # Rebuild on code changes (requires entr)
 make test     # Run tests
 make test-race # Run tests with race detector
 make cover    # Coverage summary
@@ -98,13 +137,16 @@ make watch
 ```
 main.go                    Entry point
 internal/
-  game/                    Bubbletea model, game loop
+  game/                    Bubbletea model, game loop, screen management
   aircraft/                Aircraft type, movement physics, spawner
   command/                 Command parser and executor
   collision/               Collision detection
-  runway/                  Runway definition and landing validation
-  radar/                   ASCII radar grid renderer
-  ui/                      Lipgloss styles, HUD, help overlay
+  config/                  GameConfig, difficulty params, enums
+  gamemap/                 Map definitions (runways, fixes, registry)
+  heading/                 Shared heading math (Delta, AbsDelta)
+  runway/                  Runway landing validation
+  radar/                   ASCII radar grid renderer, flight strips
+  ui/                      Lipgloss styles, HUD, help, menu, setup screen
 ```
 
 ## Built With

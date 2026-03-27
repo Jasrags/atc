@@ -5,30 +5,32 @@ import (
 	"math"
 	"math/rand"
 	"time"
+
+	"github.com/Jasrags/atc/internal/config"
 )
 
-var airlines = []string{"AA", "UA", "DL", "SW", "BA", "LH", "AF", "JL", "QF", "EK"}
+var airlinesICAO = []string{"AA", "UA", "DL", "SW", "BA", "LH", "AF", "JL", "QF", "EK"}
 
 // Spawner generates new aircraft at the edges of the radar.
 type Spawner struct {
 	rng          *rand.Rand
 	lastSpawn    time.Duration
 	baseInterval time.Duration
+	cfg          config.GameConfig
 }
 
-// NewSpawner creates a spawner with a seeded random source.
-func NewSpawner(seed int64) *Spawner {
+// NewSpawner creates a spawner with a seeded random source and game config.
+func NewSpawner(seed int64, cfg config.GameConfig) *Spawner {
 	return &Spawner{
 		rng:          rand.New(rand.NewSource(seed)),
 		baseInterval: 5 * time.Second,
+		cfg:          cfg,
 	}
 }
 
 // ShouldSpawn returns true if it's time to spawn a new aircraft.
-// The spawn interval decreases as elapsed time increases.
 func (s *Spawner) ShouldSpawn(elapsed time.Duration, currentCount int) bool {
-	maxCount := s.maxAircraft(elapsed)
-	if currentCount >= maxCount {
+	if currentCount >= s.maxAircraft(elapsed) {
 		return false
 	}
 
@@ -41,21 +43,24 @@ func (s *Spawner) ShouldSpawn(elapsed time.Duration, currentCount int) bool {
 }
 
 func (s *Spawner) spawnInterval(elapsed time.Duration) time.Duration {
+	params := s.cfg.Difficulty.Params()
 	minutes := elapsed.Minutes()
 	// Start at 5s, decrease to 1.5s over 5 minutes
 	interval := 5.0 - (minutes * 0.7)
 	if interval < 1.5 {
 		interval = 1.5
 	}
+	// Apply difficulty multiplier
+	interval *= params.IntervalMultiplier
 	return time.Duration(interval * float64(time.Second))
 }
 
 func (s *Spawner) maxAircraft(elapsed time.Duration) int {
+	params := s.cfg.Difficulty.Params()
 	minutes := elapsed.Minutes()
-	// Start at 5, increase to 15 over 5 minutes
 	max := 5 + int(minutes*2)
-	if max > 15 {
-		max = 15
+	if max > params.MaxAircraft {
+		max = params.MaxAircraft
 	}
 	return max
 }
@@ -93,13 +98,24 @@ func (s *Spawner) Spawn(width, height int) Aircraft {
 	heading = ((heading % 360) + 360) % 360
 
 	altitude := 5 + s.rng.Intn(16) // 5000-20000ft
-	speed := 2 + s.rng.Intn(3)     // 2-4
 
-	return New(callsign, x, y, heading, altitude, speed)
+	params := s.cfg.Difficulty.Params()
+	speedRange := params.MaxSpeed - params.MinSpeed + 1
+	speed := params.MinSpeed + s.rng.Intn(speedRange)
+
+	ac := New(callsign, x, y, heading, altitude, speed)
+	ac.TrailEnabled = s.cfg.PlaneTrails
+	return ac
 }
 
 func (s *Spawner) generateCallsign() string {
-	airline := airlines[s.rng.Intn(len(airlines))]
+	if s.cfg.CallsignStyle == config.CallsignShort {
+		letter := 'A' + rune(s.rng.Intn(26))
+		num := 10 + s.rng.Intn(90) // 10-99
+		return fmt.Sprintf("%c%d", letter, num)
+	}
+	// ICAO style
+	airline := airlinesICAO[s.rng.Intn(len(airlinesICAO))]
 	num := 100 + s.rng.Intn(900)
 	return fmt.Sprintf("%s%d", airline, num)
 }

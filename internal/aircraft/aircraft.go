@@ -42,8 +42,13 @@ type Aircraft struct {
 	TargetAltitude int
 	Speed          int // 1-5
 	TargetSpeed    int
-	State          State
+	State        State
+	TrailEnabled bool     // whether to record position history
+	Trail        [][2]int // previous grid positions for trail rendering
+	tickCount    int      // internal frame counter for throttled updates
 }
+
+const MaxTrailLength = 5
 
 // New creates an aircraft with the given parameters.
 func New(callsign string, x, y float64, heading, altitude, speed int) Aircraft {
@@ -78,6 +83,20 @@ func (a Aircraft) Tick() Aircraft {
 	}
 
 	next := a
+	next.tickCount++
+
+	// Record trail before moving
+	if next.TrailEnabled {
+		pos := [2]int{a.GridX(), a.GridY()}
+		trail := make([][2]int, len(a.Trail), len(a.Trail)+1)
+		copy(trail, a.Trail)
+		trail = append(trail, pos)
+		if len(trail) > MaxTrailLength {
+			trail = trail[len(trail)-MaxTrailLength:]
+		}
+		next.Trail = trail
+	}
+
 	next = next.interpolateHeading()
 	next = next.interpolateAltitude()
 	next = next.interpolateSpeed()
@@ -86,8 +105,10 @@ func (a Aircraft) Tick() Aircraft {
 }
 
 const (
-	turnRate       = 3   // degrees per tick
-	gridSpeedScale = 0.3 // grid cells per tick per speed unit
+	turnRate       = 1    // degrees per tick (10 deg/s at 10 FPS, 9s for 90-degree turn)
+	gridSpeedScale = 0.04 // grid cells per tick per speed unit (speed 3 = ~67s to cross 80 cells)
+	altTickRate    = 5    // change altitude by 1 every N ticks (~2s per 1000ft)
+	spdTickRate    = 10   // change speed by 1 every N ticks (~1s per speed unit)
 )
 
 func (a Aircraft) interpolateHeading() Aircraft {
@@ -115,6 +136,9 @@ func (a Aircraft) interpolateAltitude() Aircraft {
 	if a.Altitude == a.TargetAltitude {
 		return a
 	}
+	if a.tickCount%altTickRate != 0 {
+		return a
+	}
 	next := a
 	if a.Altitude < a.TargetAltitude {
 		next.Altitude = a.Altitude + 1
@@ -126,6 +150,9 @@ func (a Aircraft) interpolateAltitude() Aircraft {
 
 func (a Aircraft) interpolateSpeed() Aircraft {
 	if a.Speed == a.TargetSpeed {
+		return a
+	}
+	if a.tickCount%spdTickRate != 0 {
 		return a
 	}
 	next := a
