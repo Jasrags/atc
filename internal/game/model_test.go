@@ -1,13 +1,20 @@
 package game
 
 import (
+	"os"
 	"testing"
 	"time"
 
 	"github.com/Jasrags/atc/internal/aircraft"
 	"github.com/Jasrags/atc/internal/config"
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 )
+
+func TestMain(m *testing.M) {
+	zone.NewGlobal()
+	os.Exit(m.Run())
+}
 
 func newPlayingModel() Model {
 	m := NewModel()
@@ -222,8 +229,8 @@ func TestPlayingPause(t *testing.T) {
 	if model.screen != screenPaused {
 		t.Errorf("expected screenPaused, got %d", model.screen)
 	}
-	if cmd != nil {
-		t.Error("expected no tick command while pausing")
+	if cmd == nil {
+		t.Error("expected stopwatch stop command when pausing")
 	}
 }
 

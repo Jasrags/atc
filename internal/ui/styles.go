@@ -6,7 +6,10 @@ var (
 	// Radar display
 	RadarBorder = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("63"))
+			BorderTopForeground(lipgloss.Color("69")).
+			BorderBottomForeground(lipgloss.Color("33")).
+			BorderLeftForeground(lipgloss.Color("69")).
+			BorderRightForeground(lipgloss.Color("33"))
 
 	// Aircraft symbols
 	AircraftNormal = lipgloss.NewStyle().

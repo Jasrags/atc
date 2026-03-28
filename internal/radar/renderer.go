@@ -8,6 +8,7 @@ import (
 	"github.com/Jasrags/atc/internal/aircraft"
 	"github.com/Jasrags/atc/internal/gamemap"
 	"github.com/Jasrags/atc/internal/ui"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 // Render builds the ASCII radar grid with map features, aircraft, and runways.
@@ -178,10 +179,7 @@ func placeAircraft(grid [][]rune, width, height int, planes []aircraft.Aircraft)
 func renderGrid(grid [][]rune, width, height int) string {
 	var sb strings.Builder
 
-	sb.WriteString("+" + strings.Repeat("-", width) + "+\n")
-
 	for y := 0; y < height; y++ {
-		sb.WriteRune('|')
 		for x := 0; x < width; x++ {
 			ch := grid[y][x]
 			switch ch {
@@ -199,12 +197,12 @@ func renderGrid(grid [][]rune, width, height int) string {
 				sb.WriteRune(ch)
 			}
 		}
-		sb.WriteString("|\n")
+		if y < height-1 {
+			sb.WriteRune('\n')
+		}
 	}
 
-	sb.WriteString("+" + strings.Repeat("-", width) + "+")
-
-	return sb.String()
+	return ui.RadarBorder.Render(sb.String())
 }
 
 // RenderFlightStrips builds the flight strip panel showing each aircraft's status.
@@ -224,7 +222,7 @@ func RenderFlightStrips(planes []aircraft.Aircraft) string {
 			continue
 		}
 		strip := renderStrip(ac)
-		sb.WriteString(strip)
+		sb.WriteString(zone.Mark(ac.Callsign, strip))
 		sb.WriteString(strings.Repeat("─", 28) + "\n")
 	}
 
@@ -246,7 +244,7 @@ func renderStrip(ac aircraft.Aircraft) string {
 	default:
 		sb.WriteString(ui.AircraftNormal.Render(callsign))
 	}
-	sb.WriteString(strings.Repeat(" ", 16-len(callsign)-len(state)))
+	sb.WriteString(strings.Repeat(" ", max(16-len(callsign)-len(state), 0)))
 	sb.WriteString(ui.Dim.Render(state))
 	sb.WriteRune('\n')
 
