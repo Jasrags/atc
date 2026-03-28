@@ -43,17 +43,24 @@ internal/
   config/
     config.go                    # GameConfig, Difficulty, GameMode, CallsignStyle enums
   gamemap/
-    gamemap.go                   # Map, Runway, Fix data types
-    registry.go                  # Map definitions (San Diego, Chicago, Tutorial)
+    gamemap.go                   # Map, Runway, Fix, TaxiNode, TaxiEdge, Gate types + pathfinding
+    registry.go                  # Map definitions with taxiway networks (San Diego, Chicago, Tutorial)
   heading/
     heading.go                   # Shared heading math (Delta, AbsDelta)
   runway/
     runway.go                    # Runway CanLand validation
+  radio/
+    radio.go                     # RadioMessage, Log (immutable append-only), constructors
+    phraseology.go               # ATC/pilot phraseology formatting (heading, altitude, land, etc.)
+    renderer.go                  # Radio log viewport rendering with styled timestamps and directions
+  cmdtree/
+    cmdtree.go                   # Command tree state machine — resolves input text + aircraft state to options
+    renderer.go                  # Renders clickable bubblezone option buttons below ATC> prompt
   radar/
     renderer.go                  # ASCII radar grid, nav fixes, runway numbers, trail dots, flight strips
   ui/
-    styles.go                    # All lipgloss style definitions (centralized)
-    hud.go                       # Score/status bar, messages, game over overlay, pause overlay
+    styles.go                    # All lipgloss style definitions (centralized, includes radio styles)
+    hud.go                       # Score/status bar, game over overlay, pause overlay
     help.go                      # Help overlay content (command reference, keybindings)
     menu.go                      # Main menu renderer
     setup.go                     # Combined game setup screen renderer

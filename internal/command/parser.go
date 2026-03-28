@@ -13,11 +13,23 @@ type Command struct {
 	Altitude    *int
 	Speed       *int
 	ClearToLand bool
+
+	// Ground operations
+	Takeoff          bool     // T — cleared for takeoff
+	PushbackApproved bool     // PB — pushback approved
+	ExpectRunway     string   // runway after PB (optional, e.g., "PB 27")
+	TaxiRoute        []string // TX A B C1 — taxi via named taxiways
+	HoldShort        string   // HS 27 — hold short of runway
+	CrossRunway      string   // CR 27 — cleared to cross runway
+	AssignGate       string   // GATE G1 — taxi to gate
+	GoAround         bool     // GA — abort landing
 }
 
 // Parse converts a raw input string into a Command.
 // Format: <CALLSIGN> <CMD1> [<CMD2>] [<CMD3>]
-// Commands: H<0-359>, A<1-40>, S<1-5>, L
+// Commands: H<0-359>, A<1-40>, S<1-5>, L, T, PB [runway], TX <taxiway...>,
+//
+//	HS <runway>, CR <runway>, GATE <gate>, GA
 func Parse(input string) (Command, error) {
 	tokens := strings.Fields(strings.TrimSpace(input))
 	if len(tokens) == 0 {
@@ -32,11 +44,66 @@ func Parse(input string) (Command, error) {
 		return Command{}, fmt.Errorf("missing command after callsign %s", cmd.Callsign)
 	}
 
-	for _, token := range tokens[1:] {
-		token = strings.ToUpper(token)
+	i := 1
+	for i < len(tokens) {
+		token := strings.ToUpper(tokens[i])
 
-		if token == "L" {
+		switch token {
+		case "L":
 			cmd.ClearToLand = true
+			i++
+			continue
+		case "T":
+			cmd.Takeoff = true
+			i++
+			continue
+		case "GA":
+			cmd.GoAround = true
+			i++
+			continue
+		case "PB":
+			cmd.PushbackApproved = true
+			i++
+			// Optional runway argument
+			if i < len(tokens) && !isCommand(tokens[i]) {
+				cmd.ExpectRunway = strings.ToUpper(tokens[i])
+				i++
+			}
+			continue
+		case "HS":
+			i++
+			if i >= len(tokens) {
+				return Command{}, fmt.Errorf("HS requires runway (e.g., HS 27)")
+			}
+			cmd.HoldShort = strings.ToUpper(tokens[i])
+			i++
+			continue
+		case "CR":
+			i++
+			if i >= len(tokens) {
+				return Command{}, fmt.Errorf("CR requires runway (e.g., CR 27)")
+			}
+			cmd.CrossRunway = strings.ToUpper(tokens[i])
+			i++
+			continue
+		case "GATE":
+			i++
+			if i >= len(tokens) {
+				return Command{}, fmt.Errorf("GATE requires gate ID (e.g., GATE G1)")
+			}
+			cmd.AssignGate = strings.ToUpper(tokens[i])
+			i++
+			continue
+		case "TX":
+			i++
+			// Consume all remaining tokens as taxiway route
+			for i < len(tokens) && !isCommand(tokens[i]) {
+				cmd.TaxiRoute = append(cmd.TaxiRoute, strings.ToUpper(tokens[i]))
+				i++
+			}
+			if len(cmd.TaxiRoute) == 0 {
+				return Command{}, fmt.Errorf("TX requires taxiway names (e.g., TX A B C1)")
+			}
 			continue
 		}
 
@@ -81,7 +148,24 @@ func Parse(input string) (Command, error) {
 		default:
 			return Command{}, fmt.Errorf("unknown command: %s", token)
 		}
+		i++
 	}
 
 	return cmd, nil
+}
+
+// isCommand checks if a token is a known command keyword.
+func isCommand(token string) bool {
+	upper := strings.ToUpper(token)
+	switch upper {
+	case "L", "T", "GA", "PB", "HS", "CR", "GATE", "TX":
+		return true
+	}
+	if len(upper) >= 2 {
+		switch upper[0] {
+		case 'H', 'A', 'S':
+			return true
+		}
+	}
+	return false
 }

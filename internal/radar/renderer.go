@@ -158,6 +158,16 @@ func placeAircraft(grid [][]rune, width, height int, planes []aircraft.Aircraft)
 		switch ac.State {
 		case aircraft.Crashed:
 			grid[gy][gx] = 'X'
+		case aircraft.Taxiing:
+			grid[gy][gx] = 'v'
+		case aircraft.AtGate:
+			grid[gy][gx] = '#'
+		case aircraft.Pushback:
+			grid[gy][gx] = '<'
+		case aircraft.HoldShort:
+			grid[gy][gx] = '!'
+		case aircraft.OnRunway:
+			grid[gy][gx] = '>'
 		default:
 			grid[gy][gx] = '@'
 		}
@@ -187,6 +197,10 @@ func renderGrid(grid [][]rune, width, height int) string {
 				sb.WriteString(ui.AircraftNormal.Render(string(ch)))
 			case 'X':
 				sb.WriteString(ui.AircraftCrashed.Render(string(ch)))
+			case 'v', '<', '>', '#':
+				sb.WriteString(ui.AircraftGround.Render(string(ch)))
+			case '!':
+				sb.WriteString(ui.AircraftHold.Render(string(ch)))
 			case '=':
 				sb.WriteString(ui.RunwayStyle.Render(string(ch)))
 			case '^', 'o', '*', '+':
@@ -236,11 +250,13 @@ func renderStrip(ac aircraft.Aircraft) string {
 	callsign := fmt.Sprintf("%-6s", ac.Callsign)
 	state := ac.State.String()
 
-	switch ac.State {
-	case aircraft.Landing:
+	switch {
+	case ac.State == aircraft.Landing:
 		sb.WriteString(ui.AircraftLanding.Render(callsign))
-	case aircraft.Crashed:
+	case ac.State == aircraft.Crashed:
 		sb.WriteString(ui.AircraftCrashed.Render(callsign))
+	case ac.State.IsGround():
+		sb.WriteString(ui.AircraftGround.Render(callsign))
 	default:
 		sb.WriteString(ui.AircraftNormal.Render(callsign))
 	}
@@ -248,35 +264,52 @@ func renderStrip(ac aircraft.Aircraft) string {
 	sb.WriteString(ui.Dim.Render(state))
 	sb.WriteRune('\n')
 
-	// Line 2: Heading + altitude arrow + altitude + speed
-	altArrow := " "
-	if ac.Altitude < ac.TargetAltitude {
-		altArrow = "↑"
-	} else if ac.Altitude > ac.TargetAltitude {
-		altArrow = "↓"
-	}
+	// Line 2: Context depends on air vs ground
+	if ac.State.IsGround() {
+		var info []string
+		if ac.AssignedGate != "" {
+			info = append(info, "Gate "+ac.AssignedGate)
+		}
+		if ac.AssignedRunway != "" {
+			info = append(info, "Rwy "+ac.AssignedRunway)
+		}
+		if len(ac.TaxiRoute) > 0 {
+			info = append(info, "TX "+strings.Join(ac.TaxiRoute, " "))
+		}
+		if len(info) > 0 {
+			sb.WriteString(ui.Dim.Render(" " + strings.Join(info, " | ")))
+		}
+		sb.WriteRune('\n')
+	} else {
+		altArrow := " "
+		if ac.Altitude < ac.TargetAltitude {
+			altArrow = "↑"
+		} else if ac.Altitude > ac.TargetAltitude {
+			altArrow = "↓"
+		}
 
-	hdgStr := fmt.Sprintf("%03d", ac.Heading)
-	altStr := fmt.Sprintf("%s%02d", altArrow, ac.Altitude)
-	spdStr := fmt.Sprintf("S%d", ac.Speed)
+		hdgStr := fmt.Sprintf("%03d", ac.Heading)
+		altStr := fmt.Sprintf("%s%02d", altArrow, ac.Altitude)
+		spdStr := fmt.Sprintf("S%d", ac.Speed)
 
-	sb.WriteString(ui.HUDInfo.Render(fmt.Sprintf(" %s  %s  %s", hdgStr, altStr, spdStr)))
-	sb.WriteRune('\n')
+		sb.WriteString(ui.HUDInfo.Render(fmt.Sprintf(" %s  %s  %s", hdgStr, altStr, spdStr)))
+		sb.WriteRune('\n')
 
-	// Line 3: Target info (if different from current)
-	var targets []string
-	if ac.TargetHeading != ac.Heading {
-		targets = append(targets, fmt.Sprintf("H%03d", ac.TargetHeading))
-	}
-	if ac.TargetAltitude != ac.Altitude {
-		targets = append(targets, fmt.Sprintf("A%d", ac.TargetAltitude))
-	}
-	if ac.TargetSpeed != ac.Speed {
-		targets = append(targets, fmt.Sprintf("S%d", ac.TargetSpeed))
-	}
+		// Line 3: Target info (if different from current)
+		var targets []string
+		if ac.TargetHeading != ac.Heading {
+			targets = append(targets, fmt.Sprintf("H%03d", ac.TargetHeading))
+		}
+		if ac.TargetAltitude != ac.Altitude {
+			targets = append(targets, fmt.Sprintf("A%d", ac.TargetAltitude))
+		}
+		if ac.TargetSpeed != ac.Speed {
+			targets = append(targets, fmt.Sprintf("S%d", ac.TargetSpeed))
+		}
 
-	if len(targets) > 0 {
-		sb.WriteString(ui.Dim.Render(" → " + strings.Join(targets, " ")))
+		if len(targets) > 0 {
+			sb.WriteString(ui.Dim.Render(" → " + strings.Join(targets, " ")))
+		}
 	}
 	sb.WriteRune('\n')
 

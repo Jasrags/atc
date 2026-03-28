@@ -18,15 +18,15 @@ func TestExecuteHeading(t *testing.T) {
 	h := 270
 	cmd := Command{Callsign: "AA123", Heading: &h}
 
-	newPlanes, msg, err := Execute(cmd, planes)
+	newPlanes, changes, err := Execute(cmd, planes)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if newPlanes["AA123"].TargetHeading != 270 {
 		t.Errorf("target heading = %d, want 270", newPlanes["AA123"].TargetHeading)
 	}
-	if msg == "" {
-		t.Error("expected confirmation message")
+	if len(changes) == 0 {
+		t.Error("expected at least one change")
 	}
 	// Original map unchanged
 	if planes["AA123"].TargetHeading == 270 {
@@ -114,12 +114,186 @@ func TestExecuteAlreadyCleared(t *testing.T) {
 	}
 }
 
+func TestExecuteGoAround(t *testing.T) {
+	planes := makePlanes()
+	ac := planes["AA123"]
+	ac.State = aircraft.Landing
+	planes["AA123"] = ac
+
+	cmd := Command{Callsign: "AA123", GoAround: true}
+	newPlanes, changes, err := Execute(cmd, planes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newPlanes["AA123"].State != aircraft.Approaching {
+		t.Errorf("state = %v, want Approaching", newPlanes["AA123"].State)
+	}
+	if len(changes) == 0 {
+		t.Error("expected changes")
+	}
+}
+
+func TestExecuteGoAroundNotLanding(t *testing.T) {
+	planes := makePlanes()
+	cmd := Command{Callsign: "AA123", GoAround: true}
+	_, _, err := Execute(cmd, planes)
+	if err == nil {
+		t.Error("expected error for go around on non-landing aircraft")
+	}
+}
+
+func TestExecutePushback(t *testing.T) {
+	planes := makePlanes()
+	ac := planes["AA123"]
+	ac.State = aircraft.AtGate
+	planes["AA123"] = ac
+
+	cmd := Command{Callsign: "AA123", PushbackApproved: true, ExpectRunway: "27"}
+	newPlanes, changes, err := Execute(cmd, planes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newPlanes["AA123"].State != aircraft.Pushback {
+		t.Errorf("state = %v, want Pushback", newPlanes["AA123"].State)
+	}
+	if newPlanes["AA123"].AssignedRunway != "27" {
+		t.Errorf("runway = %s, want 27", newPlanes["AA123"].AssignedRunway)
+	}
+	if len(changes) == 0 {
+		t.Error("expected changes")
+	}
+}
+
+func TestExecutePushbackNotAtGate(t *testing.T) {
+	planes := makePlanes()
+	cmd := Command{Callsign: "AA123", PushbackApproved: true}
+	_, _, err := Execute(cmd, planes)
+	if err == nil {
+		t.Error("expected error for pushback on airborne aircraft")
+	}
+}
+
+func TestExecuteTakeoff(t *testing.T) {
+	planes := makePlanes()
+	ac := planes["AA123"]
+	ac.State = aircraft.HoldShort
+	planes["AA123"] = ac
+
+	cmd := Command{Callsign: "AA123", Takeoff: true}
+	newPlanes, changes, err := Execute(cmd, planes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newPlanes["AA123"].State != aircraft.OnRunway {
+		t.Errorf("state = %v, want OnRunway", newPlanes["AA123"].State)
+	}
+	if len(changes) == 0 {
+		t.Error("expected changes")
+	}
+}
+
+func TestExecuteTakeoffNotInPosition(t *testing.T) {
+	planes := makePlanes()
+	cmd := Command{Callsign: "AA123", Takeoff: true}
+	_, _, err := Execute(cmd, planes)
+	if err == nil {
+		t.Error("expected error for takeoff on airborne aircraft")
+	}
+}
+
+func TestExecuteTaxiRoute(t *testing.T) {
+	planes := makePlanes()
+	ac := planes["AA123"]
+	ac.State = aircraft.Pushback
+	planes["AA123"] = ac
+
+	cmd := Command{Callsign: "AA123", TaxiRoute: []string{"A", "B"}}
+	newPlanes, changes, err := Execute(cmd, planes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newPlanes["AA123"].State != aircraft.Taxiing {
+		t.Errorf("state = %v, want Taxiing", newPlanes["AA123"].State)
+	}
+	if len(newPlanes["AA123"].TaxiRoute) != 2 {
+		t.Errorf("taxi route len = %d, want 2", len(newPlanes["AA123"].TaxiRoute))
+	}
+	if len(changes) == 0 {
+		t.Error("expected changes")
+	}
+}
+
+func TestExecuteHoldShort(t *testing.T) {
+	planes := makePlanes()
+	ac := planes["AA123"]
+	ac.State = aircraft.Taxiing
+	planes["AA123"] = ac
+
+	cmd := Command{Callsign: "AA123", HoldShort: "27"}
+	newPlanes, _, err := Execute(cmd, planes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newPlanes["AA123"].State != aircraft.HoldShort {
+		t.Errorf("state = %v, want HoldShort", newPlanes["AA123"].State)
+	}
+}
+
+func TestExecuteCrossRunway(t *testing.T) {
+	planes := makePlanes()
+	ac := planes["AA123"]
+	ac.State = aircraft.HoldShort
+	planes["AA123"] = ac
+
+	cmd := Command{Callsign: "AA123", CrossRunway: "27"}
+	newPlanes, _, err := Execute(cmd, planes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newPlanes["AA123"].State != aircraft.Taxiing {
+		t.Errorf("state = %v, want Taxiing", newPlanes["AA123"].State)
+	}
+}
+
+func TestExecuteAssignGate(t *testing.T) {
+	planes := makePlanes()
+	ac := planes["AA123"]
+	ac.State = aircraft.Landed
+	planes["AA123"] = ac
+
+	cmd := Command{Callsign: "AA123", AssignGate: "G3"}
+	newPlanes, _, err := Execute(cmd, planes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newPlanes["AA123"].State != aircraft.Taxiing {
+		t.Errorf("state = %v, want Taxiing", newPlanes["AA123"].State)
+	}
+	if newPlanes["AA123"].AssignedGate != "G3" {
+		t.Errorf("gate = %s, want G3", newPlanes["AA123"].AssignedGate)
+	}
+}
+
+func TestExecuteAirborneOnGround(t *testing.T) {
+	planes := makePlanes()
+	ac := planes["AA123"]
+	ac.State = aircraft.Taxiing
+	planes["AA123"] = ac
+
+	h := 270
+	cmd := Command{Callsign: "AA123", Heading: &h}
+	_, _, err := Execute(cmd, planes)
+	if err == nil {
+		t.Error("expected error for heading command on ground aircraft")
+	}
+}
+
 func TestExecuteMultiCommand(t *testing.T) {
 	planes := makePlanes()
 	h, a, s := 180, 5, 4
 	cmd := Command{Callsign: "AA123", Heading: &h, Altitude: &a, Speed: &s}
 
-	newPlanes, msg, err := Execute(cmd, planes)
+	newPlanes, changes, err := Execute(cmd, planes)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -133,7 +307,7 @@ func TestExecuteMultiCommand(t *testing.T) {
 	if ac.TargetSpeed != 4 {
 		t.Errorf("speed = %d, want 4", ac.TargetSpeed)
 	}
-	if msg == "" {
-		t.Error("expected confirmation message")
+	if len(changes) != 3 {
+		t.Errorf("expected 3 changes, got %d", len(changes))
 	}
 }

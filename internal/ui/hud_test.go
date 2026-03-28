@@ -7,7 +7,7 @@ import (
 )
 
 func TestRenderHUD(t *testing.T) {
-	result := RenderHUD(5, 3, 90*time.Second, []string{"test message"})
+	result := RenderHUD(5, 3, 90*time.Second)
 
 	if !strings.Contains(result, "5") {
 		t.Error("expected score in HUD")
@@ -17,24 +17,6 @@ func TestRenderHUD(t *testing.T) {
 	}
 	if !strings.Contains(result, "01:30") {
 		t.Error("expected formatted time in HUD")
-	}
-	if !strings.Contains(result, "test message") {
-		t.Error("expected message in HUD")
-	}
-}
-
-func TestRenderHUDMessageLimit(t *testing.T) {
-	msgs := make([]string, 10)
-	for i := range msgs {
-		msgs[i] = "msg"
-	}
-
-	result := RenderHUD(0, 0, 0, msgs)
-
-	// Should only show last 5 messages
-	count := strings.Count(result, "msg")
-	if count != 5 {
-		t.Errorf("expected 5 messages, got %d", count)
 	}
 }
 

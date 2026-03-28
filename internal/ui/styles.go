@@ -24,6 +24,13 @@ var (
 			Foreground(lipgloss.Color("196")).
 			Bold(true)
 
+	AircraftGround = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("220"))
+
+	AircraftHold = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("214")).
+			Bold(true)
+
 	// Runway
 	RunwayStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("252")).
@@ -102,4 +109,38 @@ var (
 
 	Dim = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241"))
+
+	// Radio comms
+	RadioInbound = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("81")).
+			Bold(true)
+
+	RadioOutbound = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("82")).
+			Bold(true)
+
+	RadioUrgent = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("214"))
+
+	RadioEmergency = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Bold(true)
+
+	RadioBorder = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("33")).
+			Padding(0, 1)
+
+	RadioTitle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("33"))
+
+	// Command tree
+	CmdTreeOption = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("81")).
+			Bold(true)
+
+	CmdTreeSubmit = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("82")).
+			Bold(true)
 )

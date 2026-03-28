@@ -77,6 +77,127 @@ func TestParseInvalid(t *testing.T) {
 	}
 }
 
+func TestParseGroundCommands(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		check func(t *testing.T, cmd Command)
+	}{
+		{
+			"takeoff",
+			"AA123 T",
+			func(t *testing.T, cmd Command) {
+				if !cmd.Takeoff {
+					t.Error("expected Takeoff=true")
+				}
+			},
+		},
+		{
+			"go around",
+			"AA123 GA",
+			func(t *testing.T, cmd Command) {
+				if !cmd.GoAround {
+					t.Error("expected GoAround=true")
+				}
+			},
+		},
+		{
+			"pushback",
+			"AA123 PB",
+			func(t *testing.T, cmd Command) {
+				if !cmd.PushbackApproved {
+					t.Error("expected PushbackApproved=true")
+				}
+			},
+		},
+		{
+			"pushback with runway",
+			"AA123 PB 27R",
+			func(t *testing.T, cmd Command) {
+				if !cmd.PushbackApproved {
+					t.Error("expected PushbackApproved=true")
+				}
+				if cmd.ExpectRunway != "27R" {
+					t.Errorf("expected ExpectRunway=27R, got %s", cmd.ExpectRunway)
+				}
+			},
+		},
+		{
+			"taxi route",
+			"AA123 TX A B C1",
+			func(t *testing.T, cmd Command) {
+				if len(cmd.TaxiRoute) != 3 {
+					t.Fatalf("expected 3 taxiway segments, got %d", len(cmd.TaxiRoute))
+				}
+				if cmd.TaxiRoute[0] != "A" || cmd.TaxiRoute[1] != "B" || cmd.TaxiRoute[2] != "C1" {
+					t.Errorf("unexpected taxi route: %v", cmd.TaxiRoute)
+				}
+			},
+		},
+		{
+			"hold short",
+			"AA123 HS 27",
+			func(t *testing.T, cmd Command) {
+				if cmd.HoldShort != "27" {
+					t.Errorf("expected HoldShort=27, got %s", cmd.HoldShort)
+				}
+			},
+		},
+		{
+			"cross runway",
+			"AA123 CR 27",
+			func(t *testing.T, cmd Command) {
+				if cmd.CrossRunway != "27" {
+					t.Errorf("expected CrossRunway=27, got %s", cmd.CrossRunway)
+				}
+			},
+		},
+		{
+			"assign gate",
+			"AA123 GATE G3",
+			func(t *testing.T, cmd Command) {
+				if cmd.AssignGate != "G3" {
+					t.Errorf("expected AssignGate=G3, got %s", cmd.AssignGate)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, err := Parse(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cmd.Callsign != "AA123" {
+				t.Errorf("callsign = %q, want AA123", cmd.Callsign)
+			}
+			tt.check(t, cmd)
+		})
+	}
+}
+
+func TestParseGroundInvalid(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"HS missing runway", "AA123 HS"},
+		{"CR missing runway", "AA123 CR"},
+		{"GATE missing id", "AA123 GATE"},
+		{"TX missing route", "AA123 TX"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(tt.input)
+			if err == nil {
+				t.Error("expected error, got nil")
+			}
+		})
+	}
+}
+
 func assertIntPtr(t *testing.T, name string, got, want *int) {
 	t.Helper()
 	if got == nil && want == nil {

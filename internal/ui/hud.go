@@ -9,12 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 )
 
-const maxDisplayMessages = 5
-
 // RenderHUD builds the heads-up display with score, aircraft count, and elapsed time.
-func RenderHUD(score int, aircraftCount int, elapsed time.Duration, messages []string) string {
-	var sb strings.Builder
-
+func RenderHUD(score int, aircraftCount int, elapsed time.Duration) string {
 	t := table.New().
 		Headers("", "SCORE", "AIRCRAFT", "TIME").
 		Row("ATC", fmt.Sprintf("%d", score), fmt.Sprintf("%d", aircraftCount), formatDuration(elapsed)).
@@ -30,39 +26,13 @@ func RenderHUD(score int, aircraftCount int, elapsed time.Duration, messages []s
 			return lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 		})
 
-	sb.WriteString(t.Render() + "\n")
-
-	// Recent messages
-	start := 0
-	if len(messages) > maxDisplayMessages {
-		start = len(messages) - maxDisplayMessages
-	}
-	for _, msg := range messages[start:] {
-		sb.WriteString(Dim.Render(msg) + "\n")
-	}
-
-	return sb.String()
+	return t.Render() + "\n"
 }
 
 func formatDuration(d time.Duration) string {
 	m := int(d.Minutes())
 	s := int(d.Seconds()) % 60
 	return fmt.Sprintf("%02d:%02d", m, s)
-}
-
-// FormatSuccess returns a styled success message.
-func FormatSuccess(msg string) string {
-	return MessageSuccess.Render("+ " + msg)
-}
-
-// FormatError returns a styled error message.
-func FormatError(msg string) string {
-	return MessageError.Render("! " + msg)
-}
-
-// FormatInfo returns a styled info message.
-func FormatInfo(msg string) string {
-	return MessageInfo.Render("> " + msg)
 }
 
 // RenderPaused builds the paused overlay.

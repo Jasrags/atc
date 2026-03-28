@@ -413,22 +413,22 @@ func TestProcessCommandValid(t *testing.T) {
 
 func TestProcessCommandInvalid(t *testing.T) {
 	m := newPlayingModel()
-	msgCount := len(m.messages)
+	logCount := m.radioLog.Len()
 
 	m = m.processCommand("INVALID GARBAGE")
 
-	if len(m.messages) <= msgCount {
+	if m.radioLog.Len() <= logCount {
 		t.Error("expected error message for invalid command")
 	}
 }
 
 func TestProcessCommandUnknownCallsign(t *testing.T) {
 	m := newPlayingModel()
-	msgCount := len(m.messages)
+	logCount := m.radioLog.Len()
 
 	m = m.processCommand("XX999 H270")
 
-	if len(m.messages) <= msgCount {
+	if m.radioLog.Len() <= logCount {
 		t.Error("expected error message for unknown callsign")
 	}
 }

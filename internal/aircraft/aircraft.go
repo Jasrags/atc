@@ -14,6 +14,12 @@ const (
 	Landing
 	Landed
 	Crashed
+	Taxiing    // Moving on ground along taxiway
+	AtGate     // Parked at gate
+	Pushback   // Pushing back from gate
+	HoldShort  // Holding short of runway
+	OnRunway   // On the runway, cleared for takeoff
+	Departing  // Airborne after takeoff, climbing out
 )
 
 func (s State) String() string {
@@ -26,9 +32,39 @@ func (s State) String() string {
 		return "DONE"
 	case Crashed:
 		return "CRASH"
+	case Taxiing:
+		return "TAXI"
+	case AtGate:
+		return "GATE"
+	case Pushback:
+		return "PUSH"
+	case HoldShort:
+		return "HOLD"
+	case OnRunway:
+		return "TKOF"
+	case Departing:
+		return "DEPT"
 	default:
 		return "?"
 	}
+}
+
+// IsGround reports whether the aircraft is on the ground surface.
+func (s State) IsGround() bool {
+	switch s {
+	case Landed, Taxiing, AtGate, Pushback, HoldShort, OnRunway:
+		return true
+	}
+	return false
+}
+
+// IsAirborne reports whether the aircraft is in the air.
+func (s State) IsAirborne() bool {
+	switch s {
+	case Approaching, Landing, Departing:
+		return true
+	}
+	return false
 }
 
 // Aircraft represents a single aircraft on the radar.
@@ -42,10 +78,15 @@ type Aircraft struct {
 	TargetAltitude int
 	Speed          int // 1-5
 	TargetSpeed    int
-	State        State
-	TrailEnabled bool     // whether to record position history
-	Trail        [][2]int // previous grid positions for trail rendering
-	tickCount    int      // internal frame counter for throttled updates
+	State          State
+	TrailEnabled   bool     // whether to record position history
+	Trail          [][2]int // previous grid positions for trail rendering
+	tickCount      int      // internal frame counter for throttled updates
+
+	// Ground operations
+	AssignedGate   string   // gate ID (e.g., "G1")
+	AssignedRunway string   // runway for departure (e.g., "27")
+	TaxiRoute      []string // ordered taxiway names to follow
 }
 
 const MaxTrailLength = 5
@@ -79,6 +120,12 @@ func (a Aircraft) GridY() int {
 // Tick advances the aircraft by one frame, returning a new Aircraft.
 func (a Aircraft) Tick() Aircraft {
 	if a.State == Landed || a.State == Crashed {
+		return a
+	}
+
+	// Ground aircraft don't use heading-based movement — they follow taxiway paths
+	// (handled separately by the ground movement system)
+	if a.State.IsGround() {
 		return a
 	}
 

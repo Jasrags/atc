@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"github.com/Jasrags/atc/internal/aircraft"
+	"github.com/Jasrags/atc/internal/cmdtree"
 	"github.com/Jasrags/atc/internal/collision"
 	"github.com/Jasrags/atc/internal/command"
 	"github.com/Jasrags/atc/internal/config"
 	"github.com/Jasrags/atc/internal/gamemap"
 	"github.com/Jasrags/atc/internal/radar"
+	"github.com/Jasrags/atc/internal/radio"
 	"github.com/Jasrags/atc/internal/runway"
 	"github.com/Jasrags/atc/internal/ui"
 	"github.com/charmbracelet/bubbles/help"
@@ -25,8 +27,9 @@ import (
 )
 
 const (
-	minWidth  = 60
-	minHeight = 24
+	minWidth            = 60
+	minHeight           = 24
+	radioViewportHeight = 6
 )
 
 type screen int
@@ -77,7 +80,7 @@ type Model struct {
 	spawner         *aircraft.Spawner
 	input           textinput.Model
 	score           int
-	messages        []string
+	radioLog        radio.Log
 	width           int
 	height          int
 	stopwatch       stopwatch.Model
@@ -85,6 +88,8 @@ type Model struct {
 	keys            keyMap
 	help            help.Model
 	stripViewport   viewport.Model
+	radioViewport   viewport.Model
+	cmdTree         cmdtree.Tree
 }
 
 // NewModel creates a new model starting at the main menu.
@@ -104,6 +109,7 @@ func NewModel() Model {
 		gameConfig: cfg,
 		aircraft:   make(map[string]aircraft.Aircraft),
 		runways:    buildRunways(gm),
+		radioLog:   radio.NewLog(),
 		keys:       newKeyMap(),
 		help:       h,
 		setupSelections: [setupSections]int{
@@ -134,6 +140,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.stripViewport.Height = max(m.height-8, 20)
+		m.radioViewport.Width = max(m.width-4, 60)
+		m.radioViewport.Height = radioViewportHeight
 		m.help.Width = max(m.width-4, 0)
 		return m, nil
 
@@ -311,9 +319,11 @@ func (m Model) startGame() (Model, tea.Cmd) {
 	m.spawner = aircraft.NewSpawner(time.Now().UnixNano(), m.gameConfig)
 	m.input = ti
 	m.score = 0
-	m.messages = []string{ui.FormatInfo(fmt.Sprintf("Welcome to %s! Type ? for help.", m.gameMap.Name))}
+	m.radioLog = radio.NewLog()
+	m.radioLog = m.radioLog.Add(radio.SystemMessage(0, fmt.Sprintf("Welcome to %s. Type ? for help.", m.gameMap.Name), radio.Normal))
 	m.stopwatch = stopwatch.NewWithInterval(tickInterval)
 	m.stripViewport = viewport.New(32, max(m.height-8, 20))
+	m.radioViewport = viewport.New(max(m.width-4, 60), radioViewportHeight)
 	m.started = true
 
 	return m, tea.Batch(tickCmd(), textinput.Blink, m.stopwatch.Start())
@@ -334,7 +344,6 @@ func (m Model) handlePlayingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.Pause):
 		m.screen = screenPaused
-		m = m.addMessage(ui.FormatInfo("Game paused"))
 		return m, m.stopwatch.Stop()
 	}
 
@@ -343,30 +352,34 @@ func (m Model) handlePlayingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if input != "" {
 			m = m.processCommand(input)
 			m.input.Reset()
+			m.cmdTree = cmdtree.Tree{}
 		}
 		return m, nil
 	}
 
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
+	m = m.resolveTree()
 	return m, cmd
 }
 
 func (m Model) processCommand(input string) Model {
+	elapsed := m.stopwatch.Elapsed()
+
 	cmd, err := command.Parse(input)
 	if err != nil {
-		m = m.addMessage(ui.FormatError(err.Error()))
+		m = m.addRadio(radio.SystemMessage(elapsed, err.Error(), radio.Normal))
 		return m
 	}
 
-	newPlanes, msg, err := command.Execute(cmd, m.aircraft)
+	newPlanes, changes, err := command.Execute(cmd, m.aircraft)
 	if err != nil {
-		m = m.addMessage(ui.FormatError(err.Error()))
+		m = m.addRadio(radio.SystemMessage(elapsed, err.Error(), radio.Normal))
 		return m
 	}
 
 	m.aircraft = newPlanes
-	m = m.addMessage(ui.FormatSuccess(msg))
+	m = m.addRadio(radio.CommandPhraseology(elapsed, cmd.Callsign, changes))
 	return m
 }
 
@@ -390,7 +403,6 @@ func (m Model) handlePausedKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Pause):
 		m.screen = screenPlaying
-		m = m.addMessage(ui.FormatInfo("Game resumed"))
 		return m, tea.Batch(tickCmd(), m.stopwatch.Start())
 	case key.Matches(msg, m.keys.Quit):
 		return m, tea.Quit
@@ -426,16 +438,62 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Check if click is on a command tree option
+	for _, opt := range m.cmdTree.Options {
+		if zone.Get(opt.ZoneID).InBounds(msg) {
+			if opt.IsSubmit {
+				input := strings.TrimSpace(m.input.Value())
+				if input != "" {
+					m = m.processCommand(input)
+					m.input.Reset()
+					m.cmdTree = cmdtree.Tree{}
+				}
+			} else {
+				m = m.appendToInput(opt.Value)
+			}
+			return m, nil
+		}
+	}
+
 	// Check if click is on a flight strip zone
 	for callsign := range m.aircraft {
 		if zone.Get(callsign).InBounds(msg) {
 			m.input.SetValue(callsign + " ")
 			m.input.CursorEnd()
+			m = m.resolveTree()
 			return m, nil
 		}
 	}
 
 	return m, nil
+}
+
+// appendToInput adds a value to the input field and resolves the tree.
+func (m Model) appendToInput(value string) Model {
+	current := m.input.Value()
+	// If the last token is a bare command prefix (H, A, S), append value directly
+	// Otherwise add a space before the value
+	trimmed := strings.TrimRight(current, " ")
+	tokens := strings.Fields(trimmed)
+	if len(tokens) > 0 {
+		lastToken := strings.ToUpper(tokens[len(tokens)-1])
+		if len(lastToken) == 1 && (lastToken == "H" || lastToken == "A" || lastToken == "S") {
+			// Append directly to the command prefix (e.g., "H" + "270" = "H270")
+			m.input.SetValue(trimmed + value + " ")
+			m.input.CursorEnd()
+			m = m.resolveTree()
+			return m
+		}
+	}
+
+	// Otherwise append with space
+	if !strings.HasSuffix(current, " ") && current != "" {
+		current += " "
+	}
+	m.input.SetValue(current + value + " ")
+	m.input.CursorEnd()
+	m = m.resolveTree()
+	return m
 }
 
 // --- Tick ---
@@ -467,8 +525,8 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 			ac2.State = aircraft.Crashed
 			m.aircraft[c.Callsign2] = ac2
 
-			m = m.addMessage(
-				ui.FormatError(fmt.Sprintf("COLLISION: %s and %s!", c.Callsign1, c.Callsign2)))
+			m = m.addRadio(radio.SystemMessage(elapsed,
+				radio.FormatCollision(c.Callsign1, c.Callsign2), radio.Emergency))
 		}
 		m.screen = screenGameOver
 		return m, nil
@@ -482,8 +540,7 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 				if rw.CanLand(ac.GridX(), ac.GridY(), ac.Heading, ac.Altitude) {
 					ac.State = aircraft.Landed
 					m.score++
-					m = m.addMessage(
-						ui.FormatSuccess(fmt.Sprintf("%s landed safely! Score: %d", ac.Callsign, m.score)))
+					m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign, radio.FormatLanded(ac.Callsign)))
 					break
 				}
 			}
@@ -498,7 +555,8 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 		ac := m.spawner.Spawn(m.gameMap.Width, m.gameMap.Height)
 		if _, exists := m.aircraft[ac.Callsign]; !exists {
 			m.aircraft[ac.Callsign] = ac
-			m = m.addMessage(ui.FormatInfo(ac.Callsign + " entering airspace"))
+			m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
+				radio.FormatEnteringAirspace(ac.Callsign, ac.Heading, ac.Altitude)))
 		}
 	}
 
@@ -559,24 +617,46 @@ func (m Model) View() string {
 func (m Model) renderPlaying() string {
 	planes := m.sortedAircraft()
 
-	hud := ui.RenderHUD(m.score, len(planes), m.stopwatch.Elapsed(), m.messages)
+	hud := ui.RenderHUD(m.score, len(planes), m.stopwatch.Elapsed())
 	radarView := radar.Render(m.gameMap, planes)
 	sidebar := m.stripViewport.View()
 	gameArea := lipgloss.JoinHorizontal(lipgloss.Top, radarView, " ", sidebar)
 
+	radioPanel := ui.RadioBorder.Render(
+		ui.RadioTitle.Render(" RADIO ") + "\n" + m.radioViewport.View())
+
 	prompt := ui.InputPrompt.Render("ATC> ")
 	inputView := prompt + m.input.View()
 
-	return zone.Scan(lipgloss.JoinVertical(lipgloss.Left, hud, gameArea, "", inputView))
+	treeView := cmdtree.Render(m.cmdTree)
+	if treeView != "" {
+		inputView = inputView + "\n" + treeView
+	}
+
+	return zone.Scan(lipgloss.JoinVertical(lipgloss.Left, hud, gameArea, radioPanel, inputView))
 }
 
-const maxStoredMessages = 50
+func (m Model) addRadio(msg radio.Message) Model {
+	m.radioLog = m.radioLog.Add(msg)
+	m.radioViewport.SetContent(radio.RenderLog(m.radioLog.All()))
+	m.radioViewport.GotoBottom()
+	return m
+}
 
-func (m Model) addMessage(msg string) Model {
-	m.messages = append(m.messages, msg)
-	if len(m.messages) > maxStoredMessages {
-		m.messages = m.messages[len(m.messages)-maxStoredMessages:]
+// resolveTree updates the command tree based on the current input text.
+func (m Model) resolveTree() Model {
+	inputText := m.input.Value()
+	tokens := strings.Fields(inputText)
+	acState := aircraft.Approaching // default
+
+	if len(tokens) > 0 {
+		callsign := strings.ToUpper(tokens[0])
+		if ac, exists := m.aircraft[callsign]; exists {
+			acState = ac.State
+		}
 	}
+
+	m.cmdTree = cmdtree.Resolve(inputText, acState)
 	return m
 }
 
