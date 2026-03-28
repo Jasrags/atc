@@ -87,6 +87,8 @@ type Aircraft struct {
 	AssignedGate   string   // gate ID (e.g., "G1")
 	AssignedRunway string   // runway for departure (e.g., "27")
 	TaxiRoute      []string // ordered taxiway names to follow
+	TaxiPath       [][2]int // resolved node positions to traverse
+	TaxiPathIndex  int      // current position in TaxiPath
 }
 
 const MaxTrailLength = 5
@@ -217,6 +219,45 @@ func (a Aircraft) move() Aircraft {
 	speed := float64(a.Speed) * gridSpeedScale
 	next.X += speed * math.Sin(rad)
 	next.Y -= speed * math.Cos(rad)
+	return next
+}
+
+const (
+	groundTickRate = 3 // advance one node every N ticks (~0.3s per node)
+)
+
+// GroundTick advances a ground aircraft along its taxi path, returning a new Aircraft.
+// Returns the aircraft unchanged if it has no path or has reached the end.
+func (a Aircraft) GroundTick() Aircraft {
+	if !a.State.IsGround() || a.State == Landed {
+		return a
+	}
+
+	// No path to follow — stationary
+	if len(a.TaxiPath) == 0 || a.TaxiPathIndex >= len(a.TaxiPath)-1 {
+		return a
+	}
+
+	next := a
+	next.tickCount++
+
+	if next.tickCount%groundTickRate != 0 {
+		return next
+	}
+
+	// Advance to next node in path
+	next.TaxiPathIndex++
+	pos := next.TaxiPath[next.TaxiPathIndex]
+	next.X = float64(pos[0])
+	next.Y = float64(pos[1])
+
+	// If we reached the end of the path, clear it
+	if next.TaxiPathIndex >= len(next.TaxiPath)-1 {
+		next.TaxiPath = nil
+		next.TaxiPathIndex = 0
+		next.TaxiRoute = nil
+	}
+
 	return next
 }
 

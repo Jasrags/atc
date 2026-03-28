@@ -198,3 +198,81 @@ func TestIsOffScreen(t *testing.T) {
 	}
 }
 
+func TestGroundTickAdvancesAlongPath(t *testing.T) {
+	ac := New("T1", 10, 20, 0, 0, 0)
+	ac.State = Taxiing
+	ac.TaxiPath = [][2]int{{10, 20}, {15, 20}, {20, 20}}
+	ac.TaxiPathIndex = 0
+
+	for i := 0; i < groundTickRate+1; i++ {
+		ac = ac.GroundTick()
+	}
+	if ac.GridX() != 15 || ac.GridY() != 20 {
+		t.Errorf("expected position (15,20), got (%d,%d)", ac.GridX(), ac.GridY())
+	}
+}
+
+func TestGroundTickClearsPathAtEnd(t *testing.T) {
+	ac := New("T1", 10, 20, 0, 0, 0)
+	ac.State = Taxiing
+	ac.TaxiPath = [][2]int{{10, 20}, {15, 20}}
+	ac.TaxiPathIndex = 0
+
+	for i := 0; i < groundTickRate+1; i++ {
+		ac = ac.GroundTick()
+	}
+	if len(ac.TaxiPath) != 0 {
+		t.Error("taxi path should be cleared when destination reached")
+	}
+}
+
+func TestGroundTickNoPathDoesNotMove(t *testing.T) {
+	ac := New("T1", 10, 20, 0, 0, 0)
+	ac.State = Taxiing
+
+	next := ac.GroundTick()
+	if next.X != ac.X || next.Y != ac.Y {
+		t.Error("aircraft with no path should not move")
+	}
+}
+
+func TestGroundTickAirborneDoesNothing(t *testing.T) {
+	ac := New("T1", 10, 20, 90, 5, 3)
+	ac.TaxiPath = [][2]int{{10, 20}, {15, 20}}
+
+	next := ac.GroundTick()
+	if next.X != ac.X || next.Y != ac.Y {
+		t.Error("airborne aircraft should not use ground tick")
+	}
+}
+
+func TestIsGroundStates(t *testing.T) {
+	groundStates := []State{Landed, Taxiing, AtGate, Pushback, HoldShort, OnRunway}
+	for _, s := range groundStates {
+		if !s.IsGround() {
+			t.Errorf("%v should be ground", s)
+		}
+	}
+	airStates := []State{Approaching, Landing, Departing}
+	for _, s := range airStates {
+		if s.IsGround() {
+			t.Errorf("%v should not be ground", s)
+		}
+	}
+}
+
+func TestIsAirborneStates(t *testing.T) {
+	airStates := []State{Approaching, Landing, Departing}
+	for _, s := range airStates {
+		if !s.IsAirborne() {
+			t.Errorf("%v should be airborne", s)
+		}
+	}
+	nonAirStates := []State{Landed, Crashed, Taxiing, AtGate, Pushback, HoldShort, OnRunway}
+	for _, s := range nonAirStates {
+		if s.IsAirborne() {
+			t.Errorf("%v should not be airborne", s)
+		}
+	}
+}
+

@@ -338,8 +338,13 @@ func TestLandingScores(t *testing.T) {
 	if model.score != 1 {
 		t.Errorf("score = %d, want 1", model.score)
 	}
-	if _, exists := model.aircraft["AA1"]; exists {
-		t.Error("landed aircraft should be removed")
+	// Landed aircraft stay in the map for gate assignment
+	ac2, exists := model.aircraft["AA1"]
+	if !exists {
+		t.Fatal("landed aircraft should remain in map for gate taxi")
+	}
+	if ac2.State != aircraft.Landed {
+		t.Errorf("state = %v, want Landed", ac2.State)
 	}
 }
 

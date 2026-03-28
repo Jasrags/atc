@@ -14,6 +14,7 @@ import (
 // Render builds the ASCII radar grid with map features, aircraft, and runways.
 func Render(gm gamemap.Map, planes []aircraft.Aircraft) string {
 	grid := makeGrid(gm.Width, gm.Height)
+	placeTaxiways(grid, gm.Width, gm.Height, gm)
 	placeFixes(grid, gm.Width, gm.Height, gm.Fixes)
 	for _, rw := range gm.Runways {
 		placeRunway(grid, gm.Width, gm.Height, rw)
@@ -33,6 +34,76 @@ func makeGrid(width, height int) [][]rune {
 		grid[y] = row
 	}
 	return grid
+}
+
+func placeTaxiways(grid [][]rune, width, height int, gm gamemap.Map) {
+	// Draw taxiway edges as lines between nodes
+	for _, edge := range gm.TaxiEdges {
+		fromNode := gm.NodeByID(edge.From)
+		toNode := gm.NodeByID(edge.To)
+		if fromNode == nil || toNode == nil {
+			continue
+		}
+		placeTaxiLine(grid, width, height, fromNode.X, fromNode.Y, toNode.X, toNode.Y)
+	}
+
+	// Draw node markers on top
+	for _, node := range gm.TaxiNodes {
+		if node.X < 0 || node.X >= width || node.Y < 0 || node.Y >= height {
+			continue
+		}
+		switch node.Type {
+		case gamemap.NodeGate:
+			grid[node.Y][node.X] = '~' // gate marker (styled separately)
+		case gamemap.NodeHoldShort:
+			if grid[node.Y][node.X] == ' ' || grid[node.Y][node.X] == '-' || grid[node.Y][node.X] == '|' {
+				grid[node.Y][node.X] = ':'
+			}
+		}
+	}
+}
+
+// placeTaxiLine draws a taxiway segment between two points using - and | characters.
+func placeTaxiLine(grid [][]rune, width, height, x1, y1, x2, y2 int) {
+	// Horizontal segment
+	if y1 == y2 {
+		minX, maxX := x1, x2
+		if minX > maxX {
+			minX, maxX = maxX, minX
+		}
+		for x := minX; x <= maxX; x++ {
+			if x >= 0 && x < width && y1 >= 0 && y1 < height && grid[y1][x] == ' ' {
+				grid[y1][x] = '-'
+			}
+		}
+		return
+	}
+
+	// Vertical segment
+	if x1 == x2 {
+		minY, maxY := y1, y2
+		if minY > maxY {
+			minY, maxY = maxY, minY
+		}
+		for y := minY; y <= maxY; y++ {
+			if x1 >= 0 && x1 < width && y >= 0 && y < height && grid[y][x1] == ' ' {
+				grid[y][x1] = '|'
+			}
+		}
+		return
+	}
+
+	// Diagonal: draw L-shaped path (horizontal then vertical)
+	for x := min(x1, x2); x <= max(x1, x2); x++ {
+		if x >= 0 && x < width && y1 >= 0 && y1 < height && grid[y1][x] == ' ' {
+			grid[y1][x] = '-'
+		}
+	}
+	for y := min(y1, y2); y <= max(y1, y2); y++ {
+		if x2 >= 0 && x2 < width && y >= 0 && y < height && grid[y][x2] == ' ' {
+			grid[y][x2] = '|'
+		}
+	}
 }
 
 func placeFixes(grid [][]rune, width, height int, fixes []gamemap.Fix) {
@@ -205,6 +276,12 @@ func renderGrid(grid [][]rune, width, height int) string {
 				sb.WriteString(ui.RunwayStyle.Render(string(ch)))
 			case '^', 'o', '*', '+':
 				sb.WriteString(ui.FixStyle.Render(string(ch)))
+			case '-', '|':
+				sb.WriteString(ui.TaxiwayStyle.Render(string(ch)))
+			case '~':
+				sb.WriteString(ui.GateStyle.Render("#"))
+			case ':':
+				sb.WriteString(ui.HoldShortStyle.Render(":"))
 			case '.':
 				sb.WriteString(ui.Dim.Render("."))
 			default:

@@ -40,6 +40,16 @@ var (
 	FixStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("73"))
 
+	// Taxiways and ground features
+	TaxiwayStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240"))
+
+	GateStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("75"))
+
+	HoldShortStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("214"))
+
 	// HUD
 	HUDTitle = lipgloss.NewStyle().
 			Bold(true).

@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -378,6 +379,47 @@ func (m Model) processCommand(input string) Model {
 		return m
 	}
 
+	// Resolve taxi route into a path if TX command was issued
+	if len(cmd.TaxiRoute) > 0 {
+		ac := newPlanes[cmd.Callsign]
+		startNodeID := m.findNearestNode(ac)
+		if startNodeID == "" {
+			m = m.addRadio(radio.SystemMessage(elapsed, "no taxi nodes available", radio.Normal))
+		} else {
+			path, routeErr := m.gameMap.ResolveTaxiRoute(startNodeID, cmd.TaxiRoute)
+			if routeErr != nil {
+				m = m.addRadio(radio.SystemMessage(elapsed,
+					fmt.Sprintf("invalid taxi route: %s", routeErr), radio.Normal))
+				ac.State = aircraft.Pushback // revert to previous ground state
+				ac.TaxiRoute = nil
+			} else {
+				positions := m.nodeIDsToPositions(path)
+				ac.TaxiPath = positions
+				ac.TaxiPathIndex = 0
+			}
+			newPlanes[cmd.Callsign] = ac
+		}
+	}
+
+	// Resolve gate assignment into a taxi path
+	if cmd.AssignGate != "" {
+		ac := newPlanes[cmd.Callsign]
+		gate := m.gameMap.GateByID(cmd.AssignGate)
+		if gate == nil {
+			m = m.addRadio(radio.SystemMessage(elapsed,
+				fmt.Sprintf("unknown gate: %s", cmd.AssignGate), radio.Normal))
+		} else {
+			gateNode := m.gameMap.NodeByID(gate.NodeID)
+			if gateNode == nil {
+				m = m.addRadio(radio.SystemMessage(elapsed, "gate position not found", radio.Normal))
+			} else {
+				ac.TaxiPath = [][2]int{{ac.GridX(), ac.GridY()}, {gateNode.X, gateNode.Y}}
+				ac.TaxiPathIndex = 0
+				newPlanes[cmd.Callsign] = ac
+			}
+		}
+	}
+
 	m.aircraft = newPlanes
 	m = m.addRadio(radio.CommandPhraseology(elapsed, cmd.Callsign, changes))
 	return m
@@ -507,10 +549,17 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 
 	newAircraft := make(map[string]aircraft.Aircraft, len(m.aircraft))
 	for k, ac := range m.aircraft {
-		next := ac.Tick()
-		if !next.IsOffScreen(m.gameMap.Width, m.gameMap.Height) {
-			newAircraft[k] = next
+		var next aircraft.Aircraft
+		if ac.State.IsGround() && ac.State != aircraft.Landed {
+			next = ac.GroundTick()
+		} else {
+			next = ac.Tick()
 		}
+		// Only airborne aircraft can leave the radar area
+		if next.State.IsAirborne() && next.IsOffScreen(m.gameMap.Width, m.gameMap.Height) {
+			continue
+		}
+		newAircraft[k] = next
 	}
 	m.aircraft = newAircraft
 
@@ -532,9 +581,10 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Check landings and build new map excluding landed aircraft
+	// Single pass: check landings, taxi completion, and remove completed arrivals
 	activeAircraft := make(map[string]aircraft.Aircraft, len(m.aircraft))
 	for k, ac := range m.aircraft {
+		// Check landing
 		if ac.State == aircraft.Landing {
 			for _, rw := range m.runways {
 				if rw.CanLand(ac.GridX(), ac.GridY(), ac.Heading, ac.Altitude) {
@@ -545,9 +595,19 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		if ac.State != aircraft.Landed {
-			activeAircraft[k] = ac
+
+		// Check taxi completion
+		if ac.State == aircraft.Taxiing && len(ac.TaxiPath) == 0 && ac.AssignedGate != "" {
+			ac.State = aircraft.AtGate
+			m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
+				fmt.Sprintf("%s at gate %s", ac.Callsign, ac.AssignedGate)))
 		}
+
+		// Remove completed arrivals (at gate)
+		if ac.State == aircraft.AtGate {
+			continue
+		}
+		activeAircraft[k] = ac
 	}
 	m.aircraft = activeAircraft
 
@@ -658,6 +718,35 @@ func (m Model) resolveTree() Model {
 
 	m.cmdTree = cmdtree.Resolve(inputText, acState)
 	return m
+}
+
+// findNearestNode returns the ID of the closest taxi node to the aircraft's position.
+func (m Model) findNearestNode(ac aircraft.Aircraft) string {
+	gx, gy := ac.GridX(), ac.GridY()
+	bestDist := math.MaxFloat64
+	bestID := ""
+	for _, node := range m.gameMap.TaxiNodes {
+		dx := float64(node.X - gx)
+		dy := float64(node.Y - gy)
+		dist := dx*dx + dy*dy
+		if dist < bestDist {
+			bestDist = dist
+			bestID = node.ID
+		}
+	}
+	return bestID
+}
+
+// nodeIDsToPositions converts a list of node IDs into grid positions.
+func (m Model) nodeIDsToPositions(nodeIDs []string) [][2]int {
+	positions := make([][2]int, 0, len(nodeIDs))
+	for _, id := range nodeIDs {
+		node := m.gameMap.NodeByID(id)
+		if node != nil {
+			positions = append(positions, [2]int{node.X, node.Y})
+		}
+	}
+	return positions
 }
 
 func (m Model) sortedAircraft() []aircraft.Aircraft {

@@ -65,17 +65,21 @@ Define the airport surface layout as a graph for pathfinding and rendering.
 - [x] `NodeByID`, `GateByID`, `Neighbors` lookup helpers
 - [x] Validation tests: all nodes in bounds, all edges reference valid nodes, all gates reference valid nodes
 
-### Phase 5: Ground Rendering & Taxi Movement
+### Phase 5: Ground Rendering & Taxi Movement ✓
 
 Show ground traffic on the radar and move aircraft along taxiway paths.
 
-- [ ] Render taxiways as `-`/`|` chars (dimmed) on the radar grid
-- [ ] Render gates as `[G1]` blocks at airport edges
-- [ ] Render hold-short points as `!` markers before runways
-- [ ] Ground aircraft symbols: `v` (taxiing), `■` (at gate), `◄` (pushback), `!` (holding short)
-- [ ] Ground movement: aircraft follow taxiway node path at slow speed (0.01 cells/tick)
-- [ ] Aircraft snap to taxiway paths — no heading-based free movement on ground
-- [ ] Ground collision detection: two aircraft on the same taxiway segment or node
+- [x] Render taxiways as `-`/`|` chars (dimmed) on the radar grid
+- [x] Render gates as `#` markers (styled blue)
+- [x] Render hold-short points as `:` markers (styled yellow)
+- [x] Ground aircraft symbols: `v` (taxiing), `#` (at gate), `<` (pushback), `!` (holding short), `>` (on runway)
+- [x] Ground movement: `GroundTick()` advances aircraft along `TaxiPath` node positions (1 node per 3 ticks)
+- [x] Aircraft snap to taxiway node positions — no heading-based free movement on ground
+- [x] TX command resolves taxiway names into node path via `ResolveTaxiRoute`
+- [x] GATE command creates direct path to gate node position
+- [x] Landed aircraft stay in map for gate assignment (no longer removed on landing)
+- [x] Taxiing aircraft auto-transition to AtGate when path completes with gate assignment
+- [x] Aircraft removed from map when they reach AtGate state (arrival complete)
 
 ### Phase 6: Departures & Runway Occupancy
 
