@@ -261,6 +261,14 @@ func (a Aircraft) GroundTick() Aircraft {
 	return next
 }
 
+// ResetTickCount returns a new Aircraft with the internal tick counter reset to zero.
+// Used when transitioning between movement systems (ground → takeoff roll).
+func (a Aircraft) ResetTickCount() Aircraft {
+	next := a
+	next.tickCount = 0
+	return next
+}
+
 // IsOffScreen reports whether the aircraft has left the radar area.
 func (a Aircraft) IsOffScreen(width, height int) bool {
 	return a.X < -2 || a.X > float64(width+2) ||

@@ -108,6 +108,19 @@ func (s *Spawner) Spawn(width, height int) Aircraft {
 	return ac
 }
 
+// SpawnDeparture creates a new departure aircraft at a random gate.
+// Returns the aircraft and true if a gate is available, or a zero aircraft and false if not.
+func (s *Spawner) SpawnDeparture(gates []struct{ ID string; X, Y int }) (Aircraft, bool) {
+	if len(gates) == 0 {
+		return Aircraft{}, false
+	}
+	gate := gates[s.rng.Intn(len(gates))]
+	callsign := s.generateCallsign()
+	ac := NewDeparture(callsign, gate.X, gate.Y, gate.ID)
+	ac.TrailEnabled = s.cfg.PlaneTrails
+	return ac, true
+}
+
 func (s *Spawner) generateCallsign() string {
 	if s.cfg.CallsignStyle == config.CallsignShort {
 		letter := 'A' + rune(s.rng.Intn(26))

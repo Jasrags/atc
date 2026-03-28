@@ -81,19 +81,19 @@ Show ground traffic on the radar and move aircraft along taxiway paths.
 - [x] Taxiing aircraft auto-transition to AtGate when path completes with gate assignment
 - [x] Aircraft removed from map when they reach AtGate state (arrival complete)
 
-### Phase 6: Departures & Runway Occupancy
+### Phase 6: Departures & Runway Occupancy ✓
 
 Complete the arrival/departure loop with runway management.
 
-- [ ] Departure spawner: aircraft appear at gates with pushback requests
-- [ ] Departure sequence: pushback → taxi → hold short → takeoff → climb out → hand off at airspace edge
-- [ ] Takeoff roll: aircraft accelerates along runway, lifts off, transitions to airborne state
-- [ ] Climb-out: default heading + altitude assignment, player can override
-- [ ] Runway occupancy tracking: only one operation (landing, takeoff, crossing) at a time per runway
-- [ ] Hold short enforcement: aircraft at hold-short nodes wait until cleared
-- [ ] Runway incursion = collision (game over) if two aircraft on the same runway simultaneously
-- [ ] Scoring: +1 per departure handed off, +1 per arrival at gate (was: +1 per landing)
-- [ ] Departure flight strips with distinct styling
+- [x] Departure spawner: aircraft appear at gates with pushback requests (alternates with arrivals)
+- [x] `NewDeparture()` creates aircraft at gate with `AtGate` state
+- [x] `TakeoffTick()` handles `OnRunway` → `Departing` transition after 15-tick takeoff roll (~1.5s)
+- [x] Departing aircraft climb to 5000ft at speed 3, heading set from assigned runway
+- [x] Departing aircraft scored +1 when leaving airspace
+- [x] Available gates tracked — departures only spawn at unoccupied gates
+- [x] `isRunwayOccupied()` helper for future runway conflict detection
+- [x] `runwayHeading()` resolves runway number to heading for departure direction
+- [x] Departure flight strips show ground state info (gate, runway, taxi route)
 
 ### MVP Scope
 

@@ -78,7 +78,10 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft) (map[string]aircr
 		if ac.State != aircraft.HoldShort && ac.State != aircraft.OnRunway {
 			return planes, nil, fmt.Errorf("%s not in position for takeoff", cmd.Callsign)
 		}
+		ac = ac.ResetTickCount()
 		ac.State = aircraft.OnRunway
+		ac.TaxiPath = nil
+		ac.TaxiRoute = nil
 		changes = append(changes, "CLEARED FOR TAKEOFF")
 	}
 

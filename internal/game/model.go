@@ -91,6 +91,7 @@ type Model struct {
 	stripViewport   viewport.Model
 	radioViewport   viewport.Model
 	cmdTree         cmdtree.Tree
+	spawnDeparture  bool // alternates between arrival and departure spawns
 }
 
 // NewModel creates a new model starting at the main menu.
@@ -550,12 +551,32 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 	newAircraft := make(map[string]aircraft.Aircraft, len(m.aircraft))
 	for k, ac := range m.aircraft {
 		var next aircraft.Aircraft
-		if ac.State.IsGround() && ac.State != aircraft.Landed {
+		switch {
+		case ac.State == aircraft.OnRunway:
+			next = ac.TakeoffTick()
+			// Set departure heading to assigned runway heading on liftoff
+			if next.State == aircraft.Departing && ac.State == aircraft.OnRunway {
+				heading := m.runwayHeading(ac.AssignedRunway)
+				if heading == 0 {
+					// Fallback to primary runway heading
+					heading = m.gameMap.PrimaryRunway().Heading
+				}
+				next.Heading = heading
+				next.TargetHeading = heading
+			}
+		case ac.State.IsGround() && ac.State != aircraft.Landed:
 			next = ac.GroundTick()
-		} else {
+		default:
 			next = ac.Tick()
 		}
-		// Only airborne aircraft can leave the radar area
+		// Departing aircraft that leave airspace = successful departure
+		if next.State == aircraft.Departing && next.IsOffScreen(m.gameMap.Width, m.gameMap.Height) {
+			m.score++
+			m = m.addRadio(radio.PilotMessage(elapsed, next.Callsign,
+				fmt.Sprintf("%s leaving airspace, good day", next.Callsign)))
+			continue
+		}
+		// Other airborne aircraft that leave = just removed
 		if next.State.IsAirborne() && next.IsOffScreen(m.gameMap.Width, m.gameMap.Height) {
 			continue
 		}
@@ -612,11 +633,21 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 	m.aircraft = activeAircraft
 
 	if m.spawner.ShouldSpawn(elapsed, len(m.aircraft)) {
-		ac := m.spawner.Spawn(m.gameMap.Width, m.gameMap.Height)
-		if _, exists := m.aircraft[ac.Callsign]; !exists {
-			m.aircraft[ac.Callsign] = ac
-			m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
-				radio.FormatEnteringAirspace(ac.Callsign, ac.Heading, ac.Altitude)))
+		countBefore := len(m.aircraft)
+		// Alternate between arrivals and departures
+		if m.spawnDeparture && len(m.gameMap.Gates) > 0 {
+			m = m.trySpawnDeparture(elapsed)
+		} else {
+			ac := m.spawner.Spawn(m.gameMap.Width, m.gameMap.Height)
+			if _, exists := m.aircraft[ac.Callsign]; !exists {
+				m.aircraft[ac.Callsign] = ac
+				m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
+					radio.FormatEnteringAirspace(ac.Callsign, ac.Heading, ac.Altitude)))
+			}
+		}
+		// Only toggle on successful spawn
+		if len(m.aircraft) > countBefore {
+			m.spawnDeparture = !m.spawnDeparture
 		}
 	}
 
@@ -718,6 +749,61 @@ func (m Model) resolveTree() Model {
 
 	m.cmdTree = cmdtree.Resolve(inputText, acState)
 	return m
+}
+
+// trySpawnDeparture attempts to spawn a departure aircraft at an unoccupied gate.
+func (m Model) trySpawnDeparture(elapsed time.Duration) Model {
+	// Build list of available gates (not occupied by another aircraft)
+	occupiedGates := make(map[string]bool)
+	for _, ac := range m.aircraft {
+		if ac.AssignedGate != "" && ac.State.IsGround() {
+			occupiedGates[ac.AssignedGate] = true
+		}
+	}
+
+	var available []struct{ ID string; X, Y int }
+	for _, g := range m.gameMap.Gates {
+		if !occupiedGates[g.ID] {
+			node := m.gameMap.NodeByID(g.NodeID)
+			if node != nil {
+				available = append(available, struct{ ID string; X, Y int }{g.ID, node.X, node.Y})
+			}
+		}
+	}
+
+	if len(available) == 0 {
+		return m
+	}
+
+	ac, ok := m.spawner.SpawnDeparture(available)
+	if !ok {
+		return m
+	}
+	if _, exists := m.aircraft[ac.Callsign]; exists {
+		return m
+	}
+
+	m.aircraft[ac.Callsign] = ac
+	m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
+		fmt.Sprintf("%s at gate %s, requesting pushback", ac.Callsign, ac.AssignedGate)))
+	return m
+}
+
+// runwayHeading returns the heading of the named runway, or 0 if not found.
+func (m Model) runwayHeading(name string) int {
+	for _, rw := range m.gameMap.Runways {
+		// Match by runway number (e.g., "27" matches heading 270)
+		num := gamemap.RunwayNumber(rw.Heading)
+		if fmt.Sprintf("%d", num) == name {
+			return rw.Heading
+		}
+		// Also check opposite end
+		oppNum := gamemap.RunwayNumber(rw.OppositeHeading())
+		if fmt.Sprintf("%d", oppNum) == name {
+			return rw.OppositeHeading()
+		}
+	}
+	return 0
 }
 
 // findNearestNode returns the ID of the closest taxi node to the aircraft's position.

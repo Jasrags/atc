@@ -34,7 +34,8 @@ internal/
     commands.go                  # tea.Cmd factories (tickCmd at 100ms / 10 FPS)
   aircraft/
     aircraft.go                  # Aircraft struct, state machine, movement, trail tracking
-    spawner.go                   # Edge spawning with difficulty ramp, callsign generation
+    departure.go                 # NewDeparture constructor, TakeoffTick (OnRunway → Departing)
+    spawner.go                   # Edge spawning with difficulty ramp, callsign generation, departure spawning
   command/
     parser.go                    # Parse "AA123 H270 A3 S2 L" into Command structs
     executor.go                  # Apply parsed commands to aircraft map (immutable)
