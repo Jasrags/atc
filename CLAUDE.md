@@ -4,6 +4,18 @@
 
 A terminal-based air traffic control simulation built in Go using the charmbracelet TUI stack (bubbletea, bubbles, lipgloss). Players guide aircraft from radar screen edges to runways using classic ATC text commands.
 
+## Roadmap
+
+See **[ROADMAP.md](ROADMAP.md)** for the feature priority list. Always reference and update that document when planning or completing work. Features are ordered by gameplay impact:
+
+1. Departures — arrival/departure sequencing puzzle
+2. Separation rules — distance-based enforcement, not just binary collision
+3. Expanded commands — direct to fix, hold, go around, expedite, turn left/right
+4. Aircraft types — Light/Medium/Heavy with performance and wake turbulence differences
+5. Pilot patience — urgency/pressure system
+6. Scenarios/stages — structured challenges with objectives
+7. Ground operations — taxiways, runway crossing, gate assignment
+
 ## Tech Stack
 
 - **Language**: Go 1.26+

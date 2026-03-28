@@ -6,6 +6,8 @@ Guide aircraft safely to the runway using classic ATC text commands. Avoid colli
 
 **[Read the full player guide](GUIDE.md)** for detailed gameplay instructions, strategies, and tips.
 
+**[Roadmap](ROADMAP.md)** — planned features: departures, separation rules, aircraft types, scenarios, and more.
+
 ## Quick Start
 
 ```bash
