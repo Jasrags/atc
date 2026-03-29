@@ -55,6 +55,12 @@ Source: FAA ADIP Portal, Cycle SW-3 (19 MAR 2026 to 16 APR 2026)
 | SW3TO.PDF | Takeoff Minimums (SW-3 region) |
 | SW3ALT.PDF | Alternate Minimums (SW-3 region) |
 
+## Notes
+
+- Hot spot **HS1** is marked on the airport diagram (orange circle) near the general aviation parking / taxiway C-B intersection — elevated runway incursion risk area
+- No separate hot spot chart — it's embedded in the airport diagram
+- Takeoff/alternate minimums (SW3TO/SW3ALT) are regional documents covering the entire SW-3 area, not SAN-specific
+
 ## Game Relevance
 
 These charts are reference material for building realistic SAN approach/departure procedures:
