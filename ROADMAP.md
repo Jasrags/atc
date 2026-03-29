@@ -4,58 +4,58 @@ Feature priorities for closing the gap with Tower!3D Pro and IATC4. Each feature
 
 ## Priority 1: Controller Role System
 
-**Status: Not Started**
+**Status: TRACON Implemented, Tower Not Started**
 
-The player selects a role at game start that defines their scope of responsibility, available commands, visible UI panels, and what the game automates. This is the foundation for all future features — each role plays like a different game.
+The player selects a role at game start that defines their scope of responsibility, available commands, visible UI panels, and what the game automates. Each role plays like a different game. See `atc-flight-strips.md` for the full design reference.
 
-### Roles
+### Facility Model
 
-#### TRACON (Approach/Departure)
+Real-world ATC divides into distinct facilities. The game models these as selectable roles:
 
-You control aircraft from airspace entry to final approach handoff, and from departure handoff to airspace exit. The tower and ground are automated.
+| Mode | Real Facility | Phase of Flight | Status |
+|------|---------------|-----------------|--------|
+| **TRACON** | TRACON — Approach + Departure | Terminal airspace, vectors, sequencing | ✓ Implemented |
+| **Tower** | ATCT — Local Control + Ground | Runway ops, taxi, takeoff, landing | Not Started |
+| **Combined** | All of the above | Full TRACON + Tower | ✓ Implemented (current default behavior) |
+| **Center** | ARTCC — En-Route | Cruise, high altitude, flow management | Future |
+| **Clearance/Ground** | ATCT — Clearance + Ground | Pre-departure, taxi routing | Future |
 
-| Aspect | Details |
-|--------|---------|
-| **Scope** | Airspace edge → ~5nm final (arrival) / climb-out → airspace edge (departure) |
-| **Commands** | H, A, S, L (clear approach), D (direct to fix), GA, EX, TL/TR |
-| **Automated** | Tower clears to land when aligned. Ground taxis to gate. Departures auto-taxi to runway and request handoff at climb-out. |
-| **UI** | Full radar scope, flight strips for all aircraft, radio comms. No ground detail. |
-| **Scoring** | +1 per arrival handed off to tower (aligned on final). +1 per departure that exits airspace. |
-| **Game over** | Collision or separation violation (once separation rules exist). |
-| **Feel** | Classic IATC4 / TRACON! gameplay. Vectors, sequencing, altitude management. |
+### TRACON (Approach/Departure) ✓
 
-#### Tower (Local + Ground)
+- [x] Role enum + setup screen selection (TRACON / Combined)
+- [x] Command filtering: ground commands rejected
+- [x] Command tree filtered by role
+- [x] Auto-ground arrivals: landed → auto gate → auto taxi
+- [x] Auto-ground departures: auto pushback → auto taxi → auto hold short → auto takeoff
+- [x] Role shown in HUD
 
-You control the runway, the ground surface, and the immediate airfield. TRACON delivers arrivals on final and accepts departures after takeoff.
+### Tower (Local + Ground) — Not Started
+
+Tower is focused on the physical runway environment. TRACON delivers arrivals on final. Player manages the last mile + ground.
 
 | Aspect | Details |
 |--------|---------|
 | **Scope** | Final approach → landing → gate (arrivals). Gate → pushback → taxi → takeoff → initial climb (departures). |
 | **Commands** | L (clear to land), GA, T, PB, TX, HS, CR, GATE + limited H/A for go-arounds and initial departure climb |
-| **Automated** | TRACON sequences arrivals onto final — they arrive at ~5nm, aligned, descending. Departures handed off to TRACON after initial climb. |
-| **UI** | Zoomed airport surface view (taxiways, gates, runways prominent). Smaller approach radar inset. Flight strips split into arrival/departure sections. |
-| **Scoring** | +1 per arrival at gate. +1 per departure handed off to TRACON (altitude ≥ 3). |
-| **Game over** | Runway incursion (two aircraft on same runway), collision, or missed approach overflow. |
-| **Feel** | Tower!3D Pro gameplay. Runway management, taxi routing, ground conflicts. |
+| **Automated** | TRACON sequences arrivals onto final — they arrive at ~5nm, aligned, descending. Departures handed off to TRACON after initial climb (altitude ≥ 3). |
+| **UI** | Zoomed airport surface view (taxiways, gates, runways prominent). Smaller approach radar inset. Tower-specific flight strips (see below). |
+| **Scoring** | +1 per arrival at gate. +1 per departure handed off to TRACON. |
+| **Game over** | Runway incursion, collision, or missed approach overflow. |
 
-### Implementation
+Implementation:
+- [ ] Tower auto-approach: arrivals spawn pre-sequenced on ~5nm final, low altitude, descending
+- [ ] Tower auto-departure handoff: departing aircraft auto-handoff at altitude 3+
+- [ ] Tower zoomed view: airport surface fills radar, approach corridor as inset
+- [ ] Runway occupancy enforcement: only one operation per runway at a time
+- [ ] Runway incursion = game over
+- [ ] Split flight strip panels: arrivals / departures
+- [ ] Add Tower to selectable role options (currently gated)
 
-- [ ] Add `Role` enum to `config.GameConfig`: `RoleTRACON`, `RoleTower`
-- [ ] Add role selection to setup screen (new setup section between Map and Difficulty)
-- [ ] Role-aware command validation: reject commands not available for the current role
-- [ ] Role-aware command tree: only show options valid for the role
-- [ ] TRACON auto-ground: when role is TRACON, landed aircraft auto-taxi to gate (no GATE command needed)
-- [ ] TRACON auto-tower: when role is TRACON, aircraft on final auto-land when aligned (L command initiates approach, not individual landing clearance)
-- [ ] Tower auto-approach: when role is Tower, arrivals spawn pre-sequenced on ~5nm final at low altitude, already descending
-- [ ] Tower auto-departure: when role is Tower, departing aircraft auto-handoff to TRACON at altitude 3+
-- [ ] Tower zoomed view: airport surface fills most of the radar area, approach corridor shown as a small inset or strip
-- [ ] Split flight strip panels: arrivals on left, departures on right (Tower role)
-- [ ] Role-specific scoring and game-over conditions
-- [ ] Role shown in HUD
+### Future Roles
 
-### Future: Combined Role
+**Center (ARTCC):** En-route cruise phase with large geographic sectors. Big-picture flow management, sector loading, long-range sequencing. Issues wheels-up time windows to TRACON/Tower.
 
-A third option for experienced players: handle TRACON + Tower simultaneously (current behavior). This is the hardest mode and essentially what the game does today without role filtering.
+**Clearance/Ground:** Pre-departure focus. IFR clearance issuance (route, altitude, squawk), pushback approval, taxi routing puzzle. Coordinates runway crossings with Tower.
 
 ---
 
@@ -164,18 +164,26 @@ Phases 1-6 together constitute the Ground Operations MVP. Phases 1-2 (radio + co
 
 ---
 
-## Priority 3: Separation Rules (Future)
+## Priority 3: Separation & Wake Turbulence (Future)
 
 **Status: Not Started**
 
-Replace binary collision with distance-based separation enforcement.
+Replace binary collision with distance-based separation enforcement and add wake turbulence spacing.
 
+**Separation rules:**
 - Minimum lateral separation: 3 NM (grid cells as proxy)
 - Minimum vertical separation: 1000ft (1 altitude unit) when laterally close
 - Separation violation warnings (visual + message) before collision
 - Point penalty for separation violations (-50 per violation tick)
 - Near-miss tracking for stats
 - Collision still ends game, but separation violations degrade score first
+
+**Wake turbulence (requires Aircraft Types):**
+- Heavy/Super aircraft generate wake turbulence requiring extended spacing for following aircraft
+- Minimum spacing intervals based on lead/follow weight category
+- Tower mode enforces runway departure spacing (2 min behind heavy, 3 min behind super)
+- Flight strips always display wake category
+- Violations flagged on radar + radio warning
 
 ---
 
@@ -194,18 +202,30 @@ Richer ATC commands closer to real phraseology. Note: `T`, `PB`, `TX`, `HS`, `CR
 
 ---
 
-## Priority 5: Aircraft Types (Future)
+## Priority 5: Aircraft Types & Performance (Future)
 
 **Status: Not Started**
 
 Different aircraft categories with gameplay-affecting differences.
 
-- Categories: Light (L), Medium (M), Heavy (H)
-- Light: faster turns, slower speed range, shorter landing distance
-- Heavy: slower turns, faster speed range, longer runway occupancy after landing
-- Wake turbulence: extra separation required behind Heavy aircraft
-- Display aircraft type on flight strips (e.g., B738, A321, C172)
-- Spawner assigns type based on map/difficulty
+**Wake turbulence categories:** Light (L), Medium (M), Heavy (H), Super (J)
+
+**Performance differences:**
+- Light: faster turns, slower speed range (1-3), shorter landing distance
+- Medium: standard performance (B737, A320)
+- Heavy: slower turns, faster speed range (3-5), longer runway occupancy after landing
+- Super: A380/AN-225 — extreme wake spacing required
+
+**Flight strip display:**
+- Aircraft type code (B738, A321, C172, A388)
+- Equipment suffix (/L, /G, /W — IFR capability)
+- Wake turbulence category prominently displayed
+- Type affects strip color or icon for quick scan
+
+**Spawner:**
+- Assigns type based on map/difficulty
+- Heavy traffic increases at higher difficulties
+- Type distribution varies by airport (SAN = mostly medium, ORD = more heavies)
 
 ---
 
@@ -236,6 +256,104 @@ Structured challenges beyond infinite sandbox mode.
 - Scenario select screen in menu
 - Tutorial scenarios that teach one concept at a time
 - Campaign progression: unlock harder scenarios by completing easier ones
+
+---
+
+## Priority 8: Role-Specific Flight Strips (Future)
+
+**Status: Not Started**
+
+Flight strips should render differently per controller role — each position only displays what is actionable at that phase. The strip is a state machine: status flags drive available actions.
+
+**Tower strips** — lean and fast to scan:
+- Callsign, aircraft type, wake category, sequence number
+- Assigned runway, weather (wind/altimeter from ATIS)
+- Status flags: TAXI / HOLD SHORT / POSITION / AIRBORNE / LANDED
+- Arrivals additionally show expected exit taxiway
+- Does NOT show: full route, squawk, cruise altitude, next sector
+
+**TRACON strips** — data-dense, supplement the radar:
+- Callsign, type + equipment suffix, squawk code
+- Origin/destination, SID/STAR procedure
+- Assigned altitude (AFL), filed altitude (RFL), heading, speed
+- Next sector/facility for handoff
+- Status flags: RADAR CONTACT / HANDOFF / RELEASED
+
+**Strip field comparison by mode:**
+
+| Field | Tower | TRACON | Combined |
+|-------|-------|--------|----------|
+| Callsign | yes | yes | yes |
+| Aircraft type | wake category | performance | both |
+| Squawk | no | primary ID | yes |
+| Full route | no | yes | yes |
+| SID/STAR | no | yes | yes |
+| Assigned altitude | initial only | full | full |
+| Heading | initial turn | yes | yes |
+| Speed | no | yes | yes |
+| Runway | primary focus | arrivals | yes |
+| Taxi route | yes | no | yes |
+| Sequence number | yes | arrivals | yes |
+| Next sector | no | yes | no |
+
+---
+
+## Priority 9: Handoff Mechanics (Future)
+
+**Status: Not Started**
+
+Handoffs are the transitions between controller modes. In real ATC, a controller initiates a handoff, the receiver accepts, then the frequency change happens. A late or botched handoff creates downstream pressure.
+
+**Handoff modes (configurable per difficulty):**
+- Auto-handoff at boundary (Easy) — aircraft silently transitions
+- Manual initiation required (Normal) — player clicks to initiate, AI accepts
+- Handoff refusal if receiving sector is overloaded (Hard) — must reroute or hold
+
+**Departure releases:**
+- TRACON issues departure releases to Tower — Tower cannot send a departure without one during busy periods
+- Creates coordination tension between roles
+- In Combined mode, player manages both sides
+
+**Go-around cascade:**
+- Tower issues go-around → aircraft re-enters TRACON arrival sequence
+- Displaces other sequenced traffic — best stress test for TRACON mode
+- Radio comms show the cascade in real time
+
+---
+
+## Priority 10: ATIS & Weather (Future)
+
+**Status: Not Started**
+
+Automatic Terminal Information Service provides current active runway, weather, altimeter setting. All strips reference the active ATIS.
+
+**ATIS system:**
+- Active runway assignment based on wind direction
+- Wind speed/direction, altimeter setting, visibility
+- ATIS letter code (Alpha, Bravo, ...) changes when conditions update
+- All flight strips show current ATIS reference
+
+**Weather events:**
+- Wind shift → runway change (high-pressure event, cascades across all modes)
+- Reduced visibility → increased spacing requirements
+- Crosswind limits → some runways close
+- Thunderstorm cells → routing around weather
+
+**Gameplay impact:**
+- Tower strips show wind/altimeter prominently
+- Runway change forces re-sequencing of all traffic
+- Weather degrades over time within a session, increasing difficulty naturally
+
+---
+
+## Design Reference
+
+See [`docs/atc-flight-strips.md`](docs/atc-flight-strips.md) for the full design document covering:
+- Facility overview and flight lifecycle
+- Controller mode details (Clearance, Ground, Tower, TRACON, Center)
+- Flight strip field specifications per mode
+- Gameplay notes: strips as state machines, handoff mechanics, departure releases, wake turbulence, ATIS, go-arounds
+- References: FAA Order 7110.65, AIM Chapter 4, FAA AC 90-23G
 
 ---
 
