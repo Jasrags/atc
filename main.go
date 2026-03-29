@@ -23,14 +23,14 @@ func main() {
 	flag.Parse()
 
 	if *guiMode {
-		runGUI(*guiRole)
+		runGUI(*guiRole, *devMode)
 		return
 	}
 
 	runTUI(*devMode)
 }
 
-func runGUI(role string) {
+func runGUI(role string, devMode bool) {
 	gm := gamemap.ByID("san")
 
 	ebiten.SetWindowSize(1280, 720)
@@ -48,7 +48,7 @@ func runGUI(role string) {
 	mapName := strings.TrimSuffix(gm.Name, " TRACON")
 	ebiten.SetWindowTitle(fmt.Sprintf("ATC — %s %s", mapName, r.String()))
 
-	g := engine.NewGame(gm, r)
+	g := engine.NewGame(gm, r, devMode)
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatalf("ebitengine: %v", err)
 	}
