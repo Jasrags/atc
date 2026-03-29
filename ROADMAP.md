@@ -222,12 +222,12 @@ Replace binary collision with distance-based separation enforcement and add wake
 
 ## Priority 4: Expanded Command Set
 
-**Status: Implemented (except HLD)**
+**Status: Complete**
 
 Richer ATC commands closer to real phraseology.
 
 - [x] `D <fix>` — Direct to waypoint/fix (aircraft auto-navigates, recalculates heading each tick, clears on arrival within 2 cells)
-- [ ] `HLD <fix>` — Hold at fix (circle a waypoint) — future
+- [x] `HLD <fix>` — Hold at fix (standard right-turn racetrack: inbound to fix → outbound leg → right turn → repeat; cleared by H/D/L commands)
 - [x] `GA` — Go around (abort landing, climb, maintain heading) — implemented in Ground Ops
 - [x] `EX` — Expedite (double altitude change rate)
 - [x] `TL <heading>` / `TR <heading>` — Turn left/right to heading (force turn direction, overrides shortest-path)

@@ -77,6 +77,8 @@ func changeToPhraseology(change string) string {
 		return "adjust speed " + strings.TrimPrefix(change, "SPD ")
 	case strings.HasPrefix(change, "DIRECT "):
 		return "proceed direct " + strings.TrimPrefix(change, "DIRECT ")
+	case strings.HasPrefix(change, "HOLD AT "):
+		return "hold at " + strings.TrimPrefix(change, "HOLD AT ") + ", right turns, expect further clearance"
 	case change == "EXPEDITE":
 		return "expedite altitude change"
 	case strings.HasPrefix(change, "CLEARED TO LAND RWY "):

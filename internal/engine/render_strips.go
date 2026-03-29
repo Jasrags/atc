@@ -190,7 +190,9 @@ func (g *Game) drawStrip(screen *ebiten.Image, ac aircraft.Aircraft, x, y float6
 		if ac.TargetSpeed != ac.Speed {
 			targets = append(targets, fmt.Sprintf("S%d", ac.TargetSpeed))
 		}
-		if ac.TargetFixName != "" {
+		if ac.HoldingFixName != "" {
+			targets = append(targets, "HLD "+ac.HoldingFixName)
+		} else if ac.TargetFixName != "" {
 			targets = append(targets, "D "+ac.TargetFixName)
 		}
 		if len(targets) > 0 {

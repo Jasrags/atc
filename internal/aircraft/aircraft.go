@@ -14,12 +14,12 @@ const (
 	Landing
 	Landed
 	Crashed
-	Taxiing    // Moving on ground along taxiway
-	AtGate     // Parked at gate
-	Pushback   // Pushing back from gate
-	HoldShort  // Holding short of runway
-	OnRunway   // On the runway, cleared for takeoff
-	Departing  // Airborne after takeoff, climbing out
+	Taxiing   // Moving on ground along taxiway
+	AtGate    // Parked at gate
+	Pushback  // Pushing back from gate
+	HoldShort // Holding short of runway
+	OnRunway  // On the runway, cleared for takeoff
+	Departing // Airborne after takeoff, climbing out
 )
 
 func (s State) String() string {
@@ -98,6 +98,15 @@ type Aircraft struct {
 	ForceTurnDir  int     // 0 = shortest path, 1 = force left, 2 = force right
 	ExpeditedAlt  bool    // double altitude change rate
 
+	// Holding pattern
+	// Holding pattern
+	HoldingFixName  string  // name of fix to hold at (empty = not holding)
+	HoldingFixX     float64 // X position of the holding fix
+	HoldingFixY     float64 // Y position of the holding fix
+	HoldingPhase    int     // 0 = inbound to fix, 1 = outbound leg, 2 = turning inbound
+	HoldingTicks    int     // ticks spent in current phase
+	HoldingInboundH int     // fixed inbound heading (set when entering outbound, reused for turn target)
+
 	// Ground operations
 	AssignedGate   string   // gate ID (e.g., "G1")
 	AssignedRunway string   // runway for departure (e.g., "27")
@@ -110,10 +119,10 @@ const MaxTrailLength = 5
 
 // Patience thresholds (in ticks at 10 FPS)
 const (
-	PatienceDefault  = 300 // 30 seconds before first nag
-	PatienceNagEvery = 100 // nag every 10 seconds after first
-	PatiencePenaltyAt = 2  // score penalty after this many nags
-	PatienceLeaveAt   = 4  // aircraft leaves after this many nags
+	PatienceDefault   = 300 // 30 seconds before first nag
+	PatienceNagEvery  = 100 // nag every 10 seconds after first
+	PatiencePenaltyAt = 2   // score penalty after this many nags
+	PatienceLeaveAt   = 4   // aircraft leaves after this many nags
 )
 
 // PatienceLevel returns a 0-3 urgency level for display purposes.
@@ -197,6 +206,11 @@ func (a Aircraft) Tick() Aircraft {
 		next = next.updateFixHeading()
 	}
 
+	// Holding pattern — overrides normal heading after arriving at fix
+	if next.HoldingFixName != "" {
+		next = next.updateHolding()
+	}
+
 	next = next.interpolateHeading()
 	next = next.interpolateAltitude()
 	next = next.interpolateSpeed()
@@ -237,6 +251,73 @@ func (a Aircraft) updateFixHeading() Aircraft {
 		hdg += 360
 	}
 	next.TargetHeading = int(math.Round(hdg)) % 360
+	return next
+}
+
+// Holding pattern phases.
+const (
+	HoldInbound  = 0 // Flying toward the fix
+	HoldOutbound = 1 // Flying away from fix on outbound leg
+	HoldTurning  = 2 // Turning from outbound back to inbound
+
+	holdLegTicks    = 20 // ticks per outbound leg (~2 seconds at 10 TPS)
+	holdArrivalDist = 2.0
+)
+
+// updateHolding manages the holding pattern racetrack.
+// Phase 0 (inbound): fly to the fix. When arriving, turn to outbound heading.
+// Phase 1 (outbound): fly outbound for holdLegTicks, then start turning inbound.
+// Phase 2 (turning): standard right turn back toward the fix, then go inbound.
+func (a Aircraft) updateHolding() Aircraft {
+	next := a
+	dx := next.HoldingFixX - next.X
+	dy := next.HoldingFixY - next.Y
+	dist := math.Sqrt(dx*dx + dy*dy)
+
+	switch next.HoldingPhase {
+	case HoldInbound:
+		// Fly toward fix — recalculate heading each tick (active navigation).
+		inboundHdg := math.Atan2(dx, -dy) * 180 / math.Pi
+		if inboundHdg < 0 {
+			inboundHdg += 360
+		}
+		inbound := int(math.Round(inboundHdg)) % 360
+		next.TargetHeading = inbound
+		next.ForceTurnDir = 0
+
+		if dist < holdArrivalDist {
+			// Arrived at fix — compute and freeze the inbound heading, start outbound.
+			next.HoldingInboundH = inbound
+			next.HoldingPhase = HoldOutbound
+			next.HoldingTicks = 0
+			next.TargetHeading = (inbound + 180) % 360
+		}
+
+	case HoldOutbound:
+		// Fly outbound on the reciprocal of the frozen inbound heading.
+		next.TargetHeading = (next.HoldingInboundH + 180) % 360
+		next.HoldingTicks++
+		if next.HoldingTicks >= holdLegTicks {
+			// Start standard right turn back to the frozen inbound heading.
+			next.HoldingPhase = HoldTurning
+			next.HoldingTicks = 0
+			next.TargetHeading = next.HoldingInboundH
+			next.ForceTurnDir = ForceTurnRight
+		}
+
+	case HoldTurning:
+		// Right turn toward the frozen inbound heading (fixed target, no recalc).
+		next.TargetHeading = next.HoldingInboundH
+		next.ForceTurnDir = ForceTurnRight
+		delta := heading.AbsDelta(next.Heading, next.HoldingInboundH)
+		if delta < 5 {
+			// Turn complete — switch to inbound (active navigation to fix).
+			next.HoldingPhase = HoldInbound
+			next.HoldingTicks = 0
+			next.ForceTurnDir = 0
+		}
+	}
+
 	return next
 }
 

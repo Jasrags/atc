@@ -352,3 +352,36 @@ func assertIntPtr(t *testing.T, name string, got, want *int) {
 		t.Errorf("%s = %d, want %d", name, *got, *want)
 	}
 }
+
+func TestParseHoldAtFix(t *testing.T) {
+	cmd, err := Parse("AA123 HLD MAFAN")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cmd.Callsign != "AA123" {
+		t.Errorf("callsign = %s, want AA123", cmd.Callsign)
+	}
+	if cmd.HoldFix != "MAFAN" {
+		t.Errorf("HoldFix = %s, want MAFAN", cmd.HoldFix)
+	}
+}
+
+func TestParseHoldMissingFix(t *testing.T) {
+	_, err := Parse("AA123 HLD")
+	if err == nil {
+		t.Error("expected error for HLD without fix name")
+	}
+}
+
+func TestParseHoldChainedWithAltitude(t *testing.T) {
+	cmd, err := Parse("AA123 HLD BOKNE A5")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cmd.HoldFix != "BOKNE" {
+		t.Errorf("HoldFix = %s, want BOKNE", cmd.HoldFix)
+	}
+	if cmd.Altitude == nil || *cmd.Altitude != 5 {
+		t.Errorf("Altitude = %v, want 5", cmd.Altitude)
+	}
+}

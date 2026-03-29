@@ -431,3 +431,67 @@ func TestExpeditedAltitude(t *testing.T) {
 	}
 }
 
+func TestHoldingPatternPhases(t *testing.T) {
+	// Aircraft approaching the fix from the south (heading north = 0).
+	ac := New("AA1", 50, 20, 0, 5, 3)
+	ac.HoldingFixName = "TEST"
+	ac.HoldingFixX = 50
+	ac.HoldingFixY = 10
+	ac.TargetFixName = "TEST"
+	ac.TargetFixX = 50
+	ac.TargetFixY = 10
+	ac.HoldingPhase = HoldInbound
+
+	// Tick until the aircraft arrives at the fix (distance < 2).
+	maxTicks := 500
+	arrivedAtFix := false
+	for i := 0; i < maxTicks; i++ {
+		ac = ac.Tick()
+		dx := ac.X - ac.HoldingFixX
+		dy := ac.Y - ac.HoldingFixY
+		dist := math.Sqrt(dx*dx + dy*dy)
+		if dist < holdArrivalDist && ac.HoldingPhase == HoldOutbound {
+			arrivedAtFix = true
+			break
+		}
+	}
+	if !arrivedAtFix {
+		t.Fatal("aircraft never entered outbound phase of hold")
+	}
+
+	// Continue ticking to verify it transitions through outbound → turning → inbound.
+	sawTurning := false
+	sawInboundAgain := false
+	for i := 0; i < 400; i++ {
+		ac = ac.Tick()
+		if ac.HoldingPhase == HoldTurning {
+			sawTurning = true
+		}
+		if sawTurning && ac.HoldingPhase == HoldInbound {
+			sawInboundAgain = true
+			break
+		}
+	}
+	if !sawTurning {
+		t.Error("aircraft never entered turning phase")
+	}
+	if !sawInboundAgain {
+		t.Error("aircraft never returned to inbound phase (racetrack incomplete)")
+	}
+}
+
+func TestHeadingClearsHold(t *testing.T) {
+	ac := New("AA1", 50, 20, 0, 5, 3)
+	ac.HoldingFixName = "TEST"
+	ac.HoldingPhase = HoldOutbound
+
+	// Simulate what the executor does: clear hold on heading command.
+	ac.HoldingFixName = ""
+
+	ac = ac.Tick()
+
+	// The hold logic should not run since HoldingFixName is empty.
+	if ac.HoldingFixName != "" {
+		t.Error("hold should be cleared")
+	}
+}

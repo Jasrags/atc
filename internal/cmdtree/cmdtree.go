@@ -45,6 +45,7 @@ var airCommands = []commandDef{
 	{"S", "Speed"},
 	{"L", "Land"},
 	{"D", "Direct"},
+	{"HLD", "Hold"},
 	{"TL", "Turn Left"},
 	{"TR", "Turn Right"},
 	{"EX", "Expedite"},

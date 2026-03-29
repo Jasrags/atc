@@ -496,3 +496,46 @@ func TestExecuteLandWithRunway(t *testing.T) {
 		t.Errorf("expected runway in changes, got %v", changes)
 	}
 }
+
+func TestExecuteHoldAtFix(t *testing.T) {
+	planes := makePlanes()
+	cmd := Command{Callsign: "AA123", HoldFix: "MAFAN"}
+	newPlanes, changes, err := Execute(cmd, planes, config.RoleCombined)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newPlanes["AA123"].HoldingFixName != "MAFAN" {
+		t.Errorf("HoldingFixName = %s, want MAFAN", newPlanes["AA123"].HoldingFixName)
+	}
+	if newPlanes["AA123"].TargetFixName != "MAFAN" {
+		t.Errorf("TargetFixName = %s, want MAFAN (should fly to fix first)", newPlanes["AA123"].TargetFixName)
+	}
+	if len(changes) == 0 {
+		t.Error("expected changes")
+	}
+}
+
+func TestExecuteHeadingCancelsHold(t *testing.T) {
+	planes := makePlanes()
+	ac := planes["AA123"]
+	ac.HoldingFixName = "MAFAN"
+	planes["AA123"] = ac
+
+	h := 180
+	newPlanes, _, err := Execute(Command{Callsign: "AA123", Heading: &h}, planes, config.RoleCombined)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newPlanes["AA123"].HoldingFixName != "" {
+		t.Errorf("HoldingFixName should be cleared by heading command, got %s", newPlanes["AA123"].HoldingFixName)
+	}
+}
+
+func TestTowerRejectsHold(t *testing.T) {
+	planes := makePlanes()
+	cmd := Command{Callsign: "AA123", HoldFix: "MAFAN"}
+	_, _, err := Execute(cmd, planes, config.RoleTower)
+	if err == nil {
+		t.Error("expected Tower to reject HLD command")
+	}
+}

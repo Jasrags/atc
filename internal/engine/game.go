@@ -297,6 +297,30 @@ func (g *Game) processCommand(input string) {
 		}
 	}
 
+	// Resolve hold-at-fix — set both holding and navigation fix positions.
+	if cmd.HoldFix != "" {
+		ac := newPlanes[cmd.Callsign]
+		found := false
+		for _, fix := range g.gameMap.Fixes {
+			if fix.Name == cmd.HoldFix {
+				ac.HoldingFixX = float64(fix.X)
+				ac.HoldingFixY = float64(fix.Y)
+				ac.TargetFixX = float64(fix.X)
+				ac.TargetFixY = float64(fix.Y)
+				newPlanes[cmd.Callsign] = ac
+				found = true
+				break
+			}
+		}
+		if !found {
+			g.addRadio(radio.SystemMessage(g.elapsed,
+				fmt.Sprintf("unknown fix: %s", cmd.HoldFix), radio.Normal))
+			ac.HoldingFixName = ""
+			ac.TargetFixName = ""
+			newPlanes[cmd.Callsign] = ac
+		}
+	}
+
 	// Resolve taxi route.
 	if len(cmd.TaxiRoute) > 0 {
 		ac := newPlanes[cmd.Callsign]

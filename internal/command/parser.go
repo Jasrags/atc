@@ -25,11 +25,12 @@ type Command struct {
 	GoAround         bool     // GA — abort landing
 
 	// Expanded commands
-	DirectFix    string // D <fix> — direct to named waypoint
-	TurnLeft     *int   // TL <heading> — turn left to heading
-	TurnRight    *int   // TR <heading> — turn right to heading
-	Expedite     bool   // EX — double altitude change rate
-	LandRunway   string // L <runway> — clear to land on specific runway
+	DirectFix  string // D <fix> — direct to named waypoint
+	HoldFix    string // HLD <fix> — hold at named waypoint
+	TurnLeft   *int   // TL <heading> — turn left to heading
+	TurnRight  *int   // TR <heading> — turn right to heading
+	Expedite   bool   // EX — double altitude change rate
+	LandRunway string // L <runway> — clear to land on specific runway
 }
 
 // Parse converts a raw input string into a Command.
@@ -83,6 +84,14 @@ func Parse(input string) (Command, error) {
 				return Command{}, fmt.Errorf("D requires fix name (e.g., D MAFAN)")
 			}
 			cmd.DirectFix = strings.ToUpper(tokens[i])
+			i++
+			continue
+		case "HLD":
+			i++
+			if i >= len(tokens) {
+				return Command{}, fmt.Errorf("HLD requires fix name (e.g., HLD MAFAN)")
+			}
+			cmd.HoldFix = strings.ToUpper(tokens[i])
 			i++
 			continue
 		case "TL":
@@ -212,7 +221,7 @@ func Parse(input string) (Command, error) {
 func isCommand(token string) bool {
 	upper := strings.ToUpper(token)
 	switch upper {
-	case "L", "T", "GA", "PB", "HS", "CR", "GATE", "TX", "D", "TL", "TR", "EX":
+	case "L", "T", "GA", "PB", "HS", "CR", "GATE", "TX", "D", "HLD", "TL", "TR", "EX":
 		return true
 	}
 	if len(upper) >= 2 {

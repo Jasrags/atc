@@ -41,8 +41,9 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role)
 			return planes, nil, err
 		}
 		ac.TargetHeading = *cmd.Heading
-		ac.TargetFixName = "" // cancel direct-to-fix
-		ac.ForceTurnDir = 0   // reset to shortest path
+		ac.TargetFixName = ""  // cancel direct-to-fix
+		ac.HoldingFixName = "" // cancel hold
+		ac.ForceTurnDir = 0    // reset to shortest path
 		changes = append(changes, fmt.Sprintf("HDG %03d", *cmd.Heading))
 	}
 
@@ -68,7 +69,8 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role)
 		}
 		ac.TargetHeading = *cmd.TurnLeft
 		ac.ForceTurnDir = aircraft.ForceTurnLeft
-		ac.TargetFixName = "" // cancel direct-to-fix
+		ac.TargetFixName = ""  // cancel direct-to-fix
+		ac.HoldingFixName = "" // cancel hold
 		changes = append(changes, fmt.Sprintf("TURN LEFT HDG %03d", *cmd.TurnLeft))
 	}
 
@@ -78,7 +80,8 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role)
 		}
 		ac.TargetHeading = *cmd.TurnRight
 		ac.ForceTurnDir = aircraft.ForceTurnRight
-		ac.TargetFixName = "" // cancel direct-to-fix
+		ac.TargetFixName = ""  // cancel direct-to-fix
+		ac.HoldingFixName = "" // cancel hold
 		changes = append(changes, fmt.Sprintf("TURN RIGHT HDG %03d", *cmd.TurnRight))
 	}
 
@@ -88,8 +91,24 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role)
 		}
 		// Fix position is resolved in the game model (executor has no map access)
 		ac.TargetFixName = cmd.DirectFix
-		ac.ForceTurnDir = 0 // use shortest path to fix
+		ac.ForceTurnDir = 0
+		// Clear any active hold — direct overrides hold
+		ac.HoldingFixName = ""
 		changes = append(changes, fmt.Sprintf("DIRECT %s", cmd.DirectFix))
+	}
+
+	if cmd.HoldFix != "" {
+		if err = requireAirborne(ac); err != nil {
+			return planes, nil, err
+		}
+		// Fix position is resolved in the game model (executor has no map access)
+		ac.HoldingFixName = cmd.HoldFix
+		ac.HoldingPhase = 0 // start inbound
+		ac.HoldingTicks = 0
+		// Also set as navigation target to fly to the fix first
+		ac.TargetFixName = cmd.HoldFix
+		ac.ForceTurnDir = 0
+		changes = append(changes, fmt.Sprintf("HOLD AT %s", cmd.HoldFix))
 	}
 
 	if cmd.Expedite {
@@ -222,6 +241,9 @@ func checkRolePermissions(cmd Command, role config.Role) error {
 	if role == config.RoleTower {
 		if cmd.DirectFix != "" {
 			return fmt.Errorf("direct-to-fix not available in Tower mode")
+		}
+		if cmd.HoldFix != "" {
+			return fmt.Errorf("hold at fix not available in Tower mode")
 		}
 		if cmd.TurnLeft != nil {
 			return fmt.Errorf("turn left not available in Tower mode")

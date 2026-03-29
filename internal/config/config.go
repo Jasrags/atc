@@ -81,7 +81,7 @@ func (r Role) String() string {
 
 var (
 	groundCmds       = map[string]bool{"PB": true, "TX": true, "HS": true, "CR": true, "GATE": true, "T": true}
-	towerBlockedCmds = map[string]bool{"D": true, "TL": true, "TR": true, "EX": true}
+	towerBlockedCmds = map[string]bool{"D": true, "HLD": true, "TL": true, "TR": true, "EX": true}
 )
 
 // IsCommandAllowed reports whether the given command keyword is permitted for this role.
