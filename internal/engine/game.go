@@ -444,6 +444,47 @@ func (g *Game) nodeIDsToPositions(nodeIDs []string) [][2]int {
 	return positions
 }
 
+func (g *Game) findAvailableGate() string {
+	occupied := make(map[string]bool)
+	for _, ac := range g.aircraft {
+		if ac.AssignedGate != "" {
+			occupied[ac.AssignedGate] = true
+		}
+	}
+	for _, gate := range g.gameMap.Gates {
+		if !occupied[gate.ID] {
+			return gate.ID
+		}
+	}
+	return ""
+}
+
+func (g *Game) findNearestHoldShort(ac aircraft.Aircraft) (int, int, bool) {
+	gx, gy := ac.GridX(), ac.GridY()
+	bestDist := float64(1 << 60)
+	var bestX, bestY int
+	found := false
+	for _, node := range g.gameMap.TaxiNodes {
+		if node.Type != gamemap.NodeHoldShort {
+			continue
+		}
+		// Prefer hold-short nodes matching the assigned runway.
+		if ac.AssignedRunway != "" && node.Runway != "" && node.Runway != ac.AssignedRunway {
+			continue
+		}
+		dx := float64(node.X - gx)
+		dy := float64(node.Y - gy)
+		dist := dx*dx + dy*dy
+		if dist < bestDist {
+			bestDist = dist
+			bestX = node.X
+			bestY = node.Y
+			found = true
+		}
+	}
+	return bestX, bestY, found
+}
+
 // handleStripClick checks if a click is on a flight strip and populates the input.
 // Returns true if a strip was clicked (preventing camera drag).
 func (g *Game) handleStripClick(screenX, screenY int) bool {
@@ -668,13 +709,94 @@ func (g *Game) tickPhysics() {
 			}
 		}
 
-		// Landed — remove (simplified, no ground routing in GUI yet).
-		if next.State == aircraft.Landed {
-			continue
+		// --- State pipeline (post-physics, post-landing) ---
+
+		// Step 1: Taxi path completion — arrival at assigned gate.
+		// Exclude departures (they have AssignedRunway set) from being scored as arrivals.
+		if next.State == aircraft.Taxiing && len(next.TaxiPath) == 0 && next.AssignedGate != "" && next.AssignedRunway == "" {
+			g.score++
+			g.addRadio(radio.PilotMessage(g.elapsed, next.Callsign,
+				fmt.Sprintf("%s at gate %s", next.Callsign, next.AssignedGate)))
+			continue // arrival complete — remove from map
 		}
-		// Note: AtGate aircraft are NOT removed here. Departures spawn as AtGate
-		// and must stay until the player issues pushback. Arrival taxi-to-gate
-		// completion is not yet wired in the Ebitengine game loop.
+
+		// Step 2: TRACON auto-ground arrival — landed aircraft auto-taxi to gate.
+		if next.State == aircraft.Landed && g.gameConfig.Role == config.RoleTRACON {
+			gate := g.findAvailableGate()
+			if gate != "" {
+				gateObj := g.gameMap.GateByID(gate)
+				if gateObj != nil {
+					node := g.gameMap.NodeByID(gateObj.NodeID)
+					if node != nil {
+						next = next.WithState(aircraft.Taxiing)
+						next.AssignedGate = gate
+						next.TaxiPath = [][2]int{{next.GridX(), next.GridY()}, {node.X, node.Y}}
+						next.TaxiPathIndex = 0
+					}
+				}
+			}
+		}
+
+		// Step 3: TRACON auto-ground departure — automated pushback/taxi/takeoff.
+		if g.gameConfig.Role == config.RoleTRACON {
+			switch next.State {
+			case aircraft.Pushback:
+				if len(next.TaxiPath) == 0 {
+					hsX, hsY, found := g.findNearestHoldShort(next)
+					if found {
+						next = next.WithState(aircraft.Taxiing)
+						next.TaxiPath = [][2]int{{next.GridX(), next.GridY()}, {hsX, hsY}}
+						next.TaxiPathIndex = 0
+					}
+				}
+			case aircraft.Taxiing:
+				// Only departures (no gate assignment, has runway) transition to HoldShort.
+				if len(next.TaxiPath) == 0 && next.AssignedGate == "" {
+					next = next.WithState(aircraft.HoldShort)
+				}
+			case aircraft.HoldShort:
+				// Only promote to runway if no other aircraft is on the runway.
+				runwayClear := true
+				for _, other := range g.aircraft {
+					if other.Callsign != next.Callsign &&
+						(other.State == aircraft.OnRunway || other.State == aircraft.Landed) {
+						runwayClear = false
+						break
+					}
+				}
+				if runwayClear {
+					next = next.ResetTickCount()
+					next = next.WithState(aircraft.OnRunway)
+					next.TaxiPath = nil
+					next.TaxiRoute = nil
+				}
+			}
+		}
+
+		// Step 4: Patience timer — airborne aircraft nag then leave.
+		if next.State.IsAirborne() && next.PatienceMax > 0 && next.HoldingFixName == "" {
+			next.PatienceTicks++
+			nagThreshold := next.PatienceMax + next.PatienceNagCount*aircraft.PatienceNagEvery
+			if next.PatienceTicks >= nagThreshold {
+				next.PatienceNagCount++
+				switch {
+				case next.PatienceNagCount >= aircraft.PatienceLeaveAt:
+					g.score--
+					if g.score < 0 {
+						g.score = 0
+					}
+					g.addRadio(radio.PilotMessage(g.elapsed, next.Callsign,
+						fmt.Sprintf("%s leaving your airspace, good day", next.Callsign)))
+					continue // aircraft leaves — remove from map
+				case next.PatienceNagCount >= aircraft.PatiencePenaltyAt:
+					g.addRadio(radio.PilotMessage(g.elapsed, next.Callsign,
+						fmt.Sprintf("%s requesting ANY instructions!", next.Callsign)))
+				default:
+					g.addRadio(radio.PilotMessage(g.elapsed, next.Callsign,
+						fmt.Sprintf("%s still waiting for vectors", next.Callsign)))
+				}
+			}
+		}
 
 		newAircraft[k] = next
 	}
