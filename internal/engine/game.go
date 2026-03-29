@@ -672,10 +672,9 @@ func (g *Game) tickPhysics() {
 		if next.State == aircraft.Landed {
 			continue
 		}
-		// AtGate — arrival complete.
-		if next.State == aircraft.AtGate {
-			continue
-		}
+		// Note: AtGate aircraft are NOT removed here. Departures spawn as AtGate
+		// and must stay until the player issues pushback. Arrival taxi-to-gate
+		// completion is not yet wired in the Ebitengine game loop.
 
 		newAircraft[k] = next
 	}
