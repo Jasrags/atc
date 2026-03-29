@@ -5,7 +5,7 @@ GOPATH    := $(shell $(GO) env GOPATH)
 GOFLAGS   ?=
 LDFLAGS   ?= -s -w
 
-.PHONY: all build run dev watch clean test test-race cover cover-html lint vet fmt tidy help
+.PHONY: all build run run-gui run-gui-tower run-gui-combined dev watch clean test test-race cover cover-html lint vet fmt tidy help
 
 all: fmt vet test build ## Default: format, vet, test, build
 
@@ -14,6 +14,15 @@ build: ## Build the binary
 
 run: build ## Build and run the game
 	./$(BINARY)
+
+run-gui: build ## Build and run the graphical Ebitengine version (TRACON)
+	./$(BINARY) -gui
+
+run-gui-tower: build ## Build and run GUI in Tower mode
+	./$(BINARY) -gui -role tower
+
+run-gui-combined: build ## Build and run GUI in Combined mode
+	./$(BINARY) -gui -role combined
 
 dev: build ## Build and run with developer mode (/ commands)
 	./$(BINARY) -dev
