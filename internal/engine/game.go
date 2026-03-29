@@ -66,6 +66,9 @@ type Game struct {
 	// Violations
 	activeViolations map[string]bool
 
+	// UI state
+	stripHits []stripHit // bounding boxes of rendered strips for click detection
+
 	// Developer mode
 	devMode       bool
 	godMode       bool
@@ -158,6 +161,9 @@ func (g *Game) Update() error {
 		}
 	}
 
+	// Precompute strip layout for click detection (before Draw, not inside it).
+	g.stripHits = g.computeStripHits()
+
 	// Physics — skip when frozen.
 	if !g.timeFrozen {
 		for i := 0; i < g.speedMultiplier; i++ {
@@ -189,6 +195,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	// Overlay UI (always on top of radar).
 	g.drawHUD(screen)
+	g.drawStrips(screen)
 	g.drawRadioLog(screen)
 	g.drawInput(screen)
 
@@ -372,6 +379,19 @@ func (g *Game) nodeIDsToPositions(nodeIDs []string) [][2]int {
 	return positions
 }
 
+// handleStripClick checks if a click is on a flight strip and populates the input.
+// Returns true if a strip was clicked (preventing camera drag).
+func (g *Game) handleStripClick(screenX, screenY int) bool {
+	fx, fy := float64(screenX), float64(screenY)
+	for _, hit := range g.stripHits {
+		if fx >= hit.x && fx <= hit.x+hit.w && fy >= hit.y && fy <= hit.y+hit.h {
+			g.input.SetText(hit.callsign + " ")
+			return true
+		}
+	}
+	return false
+}
+
 // --- Camera input ---
 
 func (g *Game) updateCamera() {
@@ -387,7 +407,10 @@ func (g *Game) updateCamera() {
 
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		cx, cy := ebiten.CursorPosition()
-		g.camera.StartDrag(cx, cy)
+		// Check strip click first — strips are in screen-fixed UI, not camera space.
+		if !g.handleStripClick(cx, cy) {
+			g.camera.StartDrag(cx, cy)
+		}
 	} else if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		cx, cy := ebiten.CursorPosition()
 		g.camera.UpdateDrag(cx, cy)
