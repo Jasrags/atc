@@ -164,21 +164,24 @@ Phases 1-6 together constitute the Ground Operations MVP. Phases 1-2 (radio + co
 
 ---
 
-## Priority 3: Separation & Wake Turbulence (Future)
+## Priority 3: Separation & Wake Turbulence
 
-**Status: Not Started**
+**Status: Separation Implemented, Wake Turbulence Future**
 
 Replace binary collision with distance-based separation enforcement and add wake turbulence spacing.
 
-**Separation rules:**
-- Minimum lateral separation: 3 NM (grid cells as proxy)
-- Minimum vertical separation: 1000ft (1 altitude unit) when laterally close
-- Separation violation warnings (visual + message) before collision
-- Point penalty for separation violations (-50 per violation tick)
-- Near-miss tracking for stats
-- Collision still ends game, but separation violations degrade score first
+**Separation rules: ✓**
+- [x] Minimum lateral separation: 3 grid cells
+- [x] Minimum vertical separation: 1 altitude unit (1000ft) when laterally close
+- [x] Separation violation warnings: radio TRAFFIC ALERT with distance on first violation
+- [x] Score penalty: -50 per violation per tick (score cannot go below 0)
+- [x] Near-miss counter in HUD
+- [x] Radar visual: violating aircraft shown as `?` with blinking red style
+- [x] Only airborne aircraft checked (ground aircraft excluded)
+- [x] Collision still ends game (same position + same altitude)
+- [x] 100% test coverage on separation detection
 
-**Wake turbulence (requires Aircraft Types):**
+**Wake turbulence (requires Aircraft Types — future):**
 - Heavy/Super aircraft generate wake turbulence requiring extended spacing for following aircraft
 - Minimum spacing intervals based on lead/follow weight category
 - Tower mode enforces runway departure spacing (2 min behind heavy, 3 min behind super)
@@ -380,6 +383,8 @@ See [`docs/atc-flight-strips.md`](docs/atc-flight-strips.md) for the full design
 - [x] Ground taxi movement along node paths
 - [x] Departures (gate spawn, pushback, taxi, takeoff roll, climb out)
 - [x] Arrival-to-gate flow (land → GATE → taxi → arrive)
+- [x] Controller role system (TRACON with automation, Combined)
+- [x] Separation rules (3-cell lateral, 1-alt vertical, -50/tick penalty, near-miss tracking)
 
 ---
 

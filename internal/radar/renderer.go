@@ -12,7 +12,8 @@ import (
 )
 
 // Render builds the ASCII radar grid with map features, aircraft, and runways.
-func Render(gm gamemap.Map, planes []aircraft.Aircraft) string {
+// violatingCallsigns is the set of callsigns currently in separation violation.
+func Render(gm gamemap.Map, planes []aircraft.Aircraft, violatingCallsigns map[string]bool) string {
 	grid := makeGrid(gm.Width, gm.Height)
 	placeTaxiways(grid, gm.Width, gm.Height, gm)
 	placeFixes(grid, gm.Width, gm.Height, gm.Fixes)
@@ -20,7 +21,7 @@ func Render(gm gamemap.Map, planes []aircraft.Aircraft) string {
 		placeRunway(grid, gm.Width, gm.Height, rw)
 	}
 	placeTrails(grid, gm.Width, gm.Height, planes)
-	placeAircraft(grid, gm.Width, gm.Height, planes)
+	placeAircraft(grid, gm.Width, gm.Height, planes, violatingCallsigns)
 	return renderGrid(grid, gm.Width, gm.Height)
 }
 
@@ -216,7 +217,7 @@ func placeTrails(grid [][]rune, width, height int, planes []aircraft.Aircraft) {
 	}
 }
 
-func placeAircraft(grid [][]rune, width, height int, planes []aircraft.Aircraft) {
+func placeAircraft(grid [][]rune, width, height int, planes []aircraft.Aircraft, violating map[string]bool) {
 	for _, ac := range planes {
 		if ac.State == aircraft.Landed {
 			continue
@@ -240,7 +241,11 @@ func placeAircraft(grid [][]rune, width, height int, planes []aircraft.Aircraft)
 		case aircraft.OnRunway:
 			grid[gy][gx] = '>'
 		default:
-			grid[gy][gx] = '@'
+			if violating[ac.Callsign] {
+				grid[gy][gx] = '?' // separation warning
+			} else {
+				grid[gy][gx] = '@'
+			}
 		}
 
 		// Callsign label (up to 5 chars)
@@ -264,6 +269,8 @@ func renderGrid(grid [][]rune, width, height int) string {
 		for x := 0; x < width; x++ {
 			ch := grid[y][x]
 			switch ch {
+			case '?':
+				sb.WriteString(ui.AircraftWarning.Render(string(ch)))
 			case '@':
 				sb.WriteString(ui.AircraftNormal.Render(string(ch)))
 			case 'X':

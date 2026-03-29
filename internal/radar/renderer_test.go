@@ -31,7 +31,7 @@ func testMap() gamemap.Map {
 }
 
 func TestRenderEmptyGrid(t *testing.T) {
-	result := Render(testMap(), nil)
+	result := Render(testMap(), nil, nil)
 
 	// Lipgloss rounded border uses ╭ or similar characters
 	if result == "" {
@@ -46,7 +46,7 @@ func TestRenderEmptyGrid(t *testing.T) {
 }
 
 func TestRenderWithFixes(t *testing.T) {
-	result := Render(testMap(), nil)
+	result := Render(testMap(), nil, nil)
 
 	if !strings.Contains(result, "TST") {
 		t.Error("expected fix label 'TST' in output")
@@ -58,7 +58,7 @@ func TestRenderWithAircraft(t *testing.T) {
 		aircraft.New("AA1", 5, 3, 270, 5, 2),
 	}
 
-	result := Render(testMap(), planes)
+	result := Render(testMap(), planes, nil)
 
 	if !strings.Contains(result, "@") {
 		t.Error("expected aircraft symbol '@' in output")
@@ -124,7 +124,7 @@ func TestRenderRunwayNumbers(t *testing.T) {
 			{Name: "9/27", X: 15, Y: 2, Heading: 270, Length: 5},
 		},
 	}
-	result := Render(gm, nil)
+	result := Render(gm, nil, nil)
 
 	if !strings.Contains(result, "9") {
 		t.Error("expected runway number 9 in output")

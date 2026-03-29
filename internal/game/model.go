@@ -89,10 +89,12 @@ type Model struct {
 	started         bool
 	keys            keyMap
 	help            help.Model
-	stripViewport   viewport.Model
-	radioViewport   viewport.Model
-	cmdTree         cmdtree.Tree
-	spawnDeparture  bool // alternates between arrival and departure spawns
+	stripViewport      viewport.Model
+	radioViewport      viewport.Model
+	cmdTree            cmdtree.Tree
+	spawnDeparture     bool           // alternates between arrival and departure spawns
+	nearMisses         int            // total separation violations this game
+	activeViolations   map[string]bool // tracks pairs currently in violation (to warn once)
 }
 
 // NewModel creates a new model starting at the main menu.
@@ -332,6 +334,8 @@ func (m Model) startGame() (Model, tea.Cmd) {
 	m.stopwatch = stopwatch.NewWithInterval(tickInterval)
 	m.stripViewport = viewport.New(32, max(m.height-8, 20))
 	m.radioViewport = viewport.New(max(m.width-4, 60), radioViewportHeight)
+	m.nearMisses = 0
+	m.activeViolations = make(map[string]bool)
 	m.started = true
 
 	return m, tea.Batch(tickCmd(), textinput.Blink, m.stopwatch.Start())
@@ -608,6 +612,29 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Check separation violations
+	violations := collision.CheckSeparation(m.aircraft)
+	currentPairs := make(map[string]bool)
+	for _, v := range violations {
+		pairKey := v.Callsign1 + ":" + v.Callsign2
+		currentPairs[pairKey] = true
+
+		// Penalty per tick
+		m.score -= collision.ViolationPenalty
+		if m.score < 0 {
+			m.score = 0
+		}
+
+		// Warn once when violation starts
+		if !m.activeViolations[pairKey] {
+			m.nearMisses++
+			m = m.addRadio(radio.SystemMessage(elapsed,
+				fmt.Sprintf("TRAFFIC ALERT: %s and %s — loss of separation (%.1f cells)",
+					v.Callsign1, v.Callsign2, v.Distance), radio.Urgent))
+		}
+	}
+	m.activeViolations = currentPairs
+
 	// Single pass: check landings, taxi completion, and remove completed arrivals
 	activeAircraft := make(map[string]aircraft.Aircraft, len(m.aircraft))
 	for k, ac := range m.aircraft {
@@ -758,8 +785,17 @@ func (m Model) View() string {
 func (m Model) renderPlaying() string {
 	planes := m.sortedAircraft()
 
-	hud := ui.RenderHUD(m.score, len(planes), m.stopwatch.Elapsed(), m.gameConfig.Role.String())
-	radarView := radar.Render(m.gameMap, planes)
+	hud := ui.RenderHUD(m.score, len(planes), m.stopwatch.Elapsed(), m.gameConfig.Role.String(), m.nearMisses)
+	// Build set of callsigns currently in violation for radar highlighting
+	violating := make(map[string]bool)
+	for pair := range m.activeViolations {
+		parts := strings.SplitN(pair, ":", 2)
+		if len(parts) == 2 {
+			violating[parts[0]] = true
+			violating[parts[1]] = true
+		}
+	}
+	radarView := radar.Render(m.gameMap, planes, violating)
 	sidebar := m.stripViewport.View()
 	gameArea := lipgloss.JoinHorizontal(lipgloss.Top, radarView, " ", sidebar)
 
