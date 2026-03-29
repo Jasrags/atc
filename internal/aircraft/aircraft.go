@@ -364,6 +364,21 @@ func (a Aircraft) GroundTick() Aircraft {
 	return next
 }
 
+// WithState returns a new Aircraft with the given state.
+func (a Aircraft) WithState(s State) Aircraft {
+	next := a
+	next.State = s
+	return next
+}
+
+// WithHeading returns a new Aircraft with both heading and target heading set.
+func (a Aircraft) WithHeading(h int) Aircraft {
+	next := a
+	next.Heading = h
+	next.TargetHeading = h
+	return next
+}
+
 // ResetTickCount returns a new Aircraft with the internal tick counter reset to zero.
 // Used when transitioning between movement systems (ground → takeoff roll).
 func (a Aircraft) ResetTickCount() Aircraft {

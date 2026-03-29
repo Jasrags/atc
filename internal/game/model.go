@@ -578,6 +578,157 @@ func (m Model) appendToInput(value string) Model {
 
 // --- Tick ---
 
+// tickEffect accumulates side effects from pure per-aircraft transformations.
+// Each transformation returns a new Aircraft plus a tickEffect; the caller
+// merges all effects into the Model after the pipeline completes.
+type tickEffect struct {
+	scoreDelta int
+	messages   []radio.Message
+	remove     bool // aircraft should be removed from the active map
+}
+
+// merge combines another tickEffect into this one.
+func (e tickEffect) merge(other tickEffect) tickEffect {
+	e.scoreDelta += other.scoreDelta
+	e.messages = append(e.messages, other.messages...)
+	e.remove = e.remove || other.remove
+	return e
+}
+
+// tickLanding checks whether a Landing aircraft has reached a runway and
+// transitions it to Landed. Returns the (possibly updated) aircraft and effect.
+func (m Model) tickLanding(ac aircraft.Aircraft, elapsed time.Duration) (aircraft.Aircraft, tickEffect) {
+	if ac.State != aircraft.Landing {
+		return ac, tickEffect{}
+	}
+	for i, rw := range m.runways {
+		if ac.AssignedLandingRunway != "" && i < len(m.gameMap.Runways) {
+			if !strings.Contains(m.gameMap.Runways[i].Name, ac.AssignedLandingRunway) {
+				continue
+			}
+		}
+		if rw.CanLand(ac.GridX(), ac.GridY(), ac.Heading, ac.Altitude) {
+			next := ac
+			next.State = aircraft.Landed
+			return next, tickEffect{
+				scoreDelta: 1,
+				messages:   []radio.Message{radio.PilotMessage(elapsed, ac.Callsign, radio.FormatLanded(ac.Callsign))},
+			}
+		}
+	}
+	return ac, tickEffect{}
+}
+
+// tickAutoGroundArrival handles TRACON auto-ground: landed aircraft auto-taxi
+// to the nearest available gate.
+func (m Model) tickAutoGroundArrival(ac aircraft.Aircraft) (aircraft.Aircraft, tickEffect) {
+	if ac.State != aircraft.Landed || m.gameConfig.Role != config.RoleTRACON {
+		return ac, tickEffect{}
+	}
+	gate := m.findAvailableGate()
+	if gate == "" {
+		return ac, tickEffect{}
+	}
+	gateObj := m.gameMap.GateByID(gate)
+	if gateObj == nil {
+		return ac, tickEffect{}
+	}
+	node := m.gameMap.NodeByID(gateObj.NodeID)
+	if node == nil {
+		return ac, tickEffect{}
+	}
+	next := ac
+	next.AssignedGate = gate
+	next.State = aircraft.Taxiing
+	next.TaxiPath = [][2]int{{ac.GridX(), ac.GridY()}, {node.X, node.Y}}
+	next.TaxiPathIndex = 0
+	return next, tickEffect{}
+}
+
+// tickTaxiComplete checks whether a taxiing aircraft with a gate assignment
+// has finished its path. Returns an AtGate aircraft with a radio message.
+func (m Model) tickTaxiComplete(ac aircraft.Aircraft, elapsed time.Duration) (aircraft.Aircraft, tickEffect) {
+	if ac.State != aircraft.Taxiing || len(ac.TaxiPath) != 0 || ac.AssignedGate == "" {
+		return ac, tickEffect{}
+	}
+	next := ac
+	next.State = aircraft.AtGate
+	return next, tickEffect{
+		messages: []radio.Message{radio.PilotMessage(elapsed, ac.Callsign,
+			fmt.Sprintf("%s at gate %s", ac.Callsign, ac.AssignedGate))},
+	}
+}
+
+// tickAutoGroundDeparture handles TRACON auto-departure: automates pushback →
+// taxi → hold short → on-runway transitions.
+func (m Model) tickAutoGroundDeparture(ac aircraft.Aircraft) (aircraft.Aircraft, tickEffect) {
+	if m.gameConfig.Role != config.RoleTRACON {
+		return ac, tickEffect{}
+	}
+	switch ac.State {
+	case aircraft.Pushback:
+		if len(ac.TaxiPath) == 0 {
+			hsNode := m.findNearestHoldShort(ac)
+			if hsNode != nil {
+				next := ac
+				next.State = aircraft.Taxiing
+				next.TaxiPath = [][2]int{{ac.GridX(), ac.GridY()}, {hsNode.X, hsNode.Y}}
+				next.TaxiPathIndex = 0
+				return next, tickEffect{}
+			}
+		}
+	case aircraft.Taxiing:
+		if len(ac.TaxiPath) == 0 && ac.AssignedGate == "" {
+			next := ac
+			next.State = aircraft.HoldShort
+			return next, tickEffect{}
+		}
+	case aircraft.HoldShort:
+		next := ac.ResetTickCount()
+		next.State = aircraft.OnRunway
+		next.TaxiPath = nil
+		next.TaxiRoute = nil
+		return next, tickEffect{}
+	}
+	return ac, tickEffect{}
+}
+
+// tickPatience advances the patience timer for airborne aircraft and generates
+// nag messages or removal when patience expires.
+func (m Model) tickPatience(ac aircraft.Aircraft, elapsed time.Duration) (aircraft.Aircraft, tickEffect) {
+	if !ac.State.IsAirborne() || ac.PatienceMax == 0 {
+		return ac, tickEffect{}
+	}
+	next := ac
+	next.PatienceTicks++
+
+	nagThreshold := next.PatienceMax + next.PatienceNagCount*aircraft.PatienceNagEvery
+	if next.PatienceTicks < nagThreshold {
+		return next, tickEffect{}
+	}
+
+	next.PatienceNagCount++
+	switch {
+	case next.PatienceNagCount >= aircraft.PatienceLeaveAt:
+		return next, tickEffect{
+			scoreDelta: -1,
+			messages: []radio.Message{radio.PilotMessage(elapsed, ac.Callsign,
+				fmt.Sprintf("%s leaving your airspace, good day", ac.Callsign))},
+			remove: true,
+		}
+	case next.PatienceNagCount >= aircraft.PatiencePenaltyAt:
+		return next, tickEffect{
+			messages: []radio.Message{radio.PilotMessage(elapsed, ac.Callsign,
+				fmt.Sprintf("%s requesting ANY instructions!", ac.Callsign))},
+		}
+	default:
+		return next, tickEffect{
+			messages: []radio.Message{radio.PilotMessage(elapsed, ac.Callsign,
+				fmt.Sprintf("%s still waiting for vectors", ac.Callsign))},
+		}
+	}
+}
+
 func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 	if m.screen != screenPlaying {
 		return m, nil
@@ -585,21 +736,19 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 
 	elapsed := m.stopwatch.Elapsed()
 
+	// Phase 1: advance physics (each Tick/GroundTick/TakeoffTick is already pure)
 	newAircraft := make(map[string]aircraft.Aircraft, len(m.aircraft))
 	for k, ac := range m.aircraft {
 		var next aircraft.Aircraft
 		switch {
 		case ac.State == aircraft.OnRunway:
 			next = ac.TakeoffTick()
-			// Set departure heading to assigned runway heading on liftoff
 			if next.State == aircraft.Departing && ac.State == aircraft.OnRunway {
-				heading := m.runwayHeading(ac.AssignedRunway)
-				if heading == 0 {
-					// Fallback to primary runway heading
-					heading = m.gameMap.PrimaryRunway().Heading
+				hdg := m.runwayHeading(ac.AssignedRunway)
+				if hdg == 0 {
+					hdg = m.gameMap.PrimaryRunway().Heading
 				}
-				next.Heading = heading
-				next.TargetHeading = heading
+				next = next.WithHeading(hdg)
 			}
 		case ac.State.IsGround() && ac.State != aircraft.Landed:
 			next = ac.GroundTick()
@@ -621,37 +770,31 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 	}
 	m.aircraft = newAircraft
 
+	// Phase 2: collision detection (immutable — build new map with crashed state)
 	collisions := collision.Check(m.aircraft)
 	if len(collisions) > 0 {
+		crashed := make(map[string]aircraft.Aircraft, len(m.aircraft))
+		for k, ac := range m.aircraft {
+			crashed[k] = ac
+		}
 		for _, c := range collisions {
-			ac1 := m.aircraft[c.Callsign1]
-			ac1.State = aircraft.Crashed
-			m.aircraft[c.Callsign1] = ac1
-
-			ac2 := m.aircraft[c.Callsign2]
-			ac2.State = aircraft.Crashed
-			m.aircraft[c.Callsign2] = ac2
-
+			crashed[c.Callsign1] = crashed[c.Callsign1].WithState(aircraft.Crashed)
+			crashed[c.Callsign2] = crashed[c.Callsign2].WithState(aircraft.Crashed)
 			m = m.addRadio(radio.SystemMessage(elapsed,
 				radio.FormatCollision(c.Callsign1, c.Callsign2), radio.Emergency))
 		}
+		m.aircraft = crashed
 		m.screen = screenGameOver
 		return m, nil
 	}
 
-	// Check separation violations.
-	// NOTE: This must run after collision.Check which returns early on game over.
-	// If Check finds a collision, we never reach this code — separation penalties
-	// should not apply to aircraft that are simultaneously colliding.
+	// Phase 3: separation violations
 	violations := collision.CheckSeparation(m.aircraft)
 	currentPairs := make(map[string]bool)
 	for _, v := range violations {
 		pairKey := v.Callsign1 + ":" + v.Callsign2
 		currentPairs[pairKey] = true
-
 		m.score -= collision.ViolationPenalty
-
-		// Warn once when violation starts
 		if !m.activeViolations[pairKey] {
 			m.nearMisses++
 			m = m.addRadio(radio.SystemMessage(elapsed,
@@ -664,117 +807,47 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 	}
 	m.activeViolations = currentPairs
 
-	// Single pass: check landings, taxi completion, and remove completed arrivals
+	// Phase 4: per-aircraft state pipeline (pure transformations)
 	activeAircraft := make(map[string]aircraft.Aircraft, len(m.aircraft))
 	for k, ac := range m.aircraft {
-		// Check landing
-		if ac.State == aircraft.Landing {
-			for i, rw := range m.runways {
-				// If assigned to a specific runway, skip others
-				if ac.AssignedLandingRunway != "" && i < len(m.gameMap.Runways) {
-					if !strings.Contains(m.gameMap.Runways[i].Name, ac.AssignedLandingRunway) {
-						continue
-					}
-				}
-				if rw.CanLand(ac.GridX(), ac.GridY(), ac.Heading, ac.Altitude) {
-					ac.State = aircraft.Landed
-					m.score++
-					m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign, radio.FormatLanded(ac.Callsign)))
-					break
-				}
-			}
+		var fx tickEffect
+		var combined tickEffect
+
+		ac, fx = m.tickLanding(ac, elapsed)
+		combined = combined.merge(fx)
+
+		ac, fx = m.tickAutoGroundArrival(ac)
+		combined = combined.merge(fx)
+
+		ac, fx = m.tickTaxiComplete(ac, elapsed)
+		combined = combined.merge(fx)
+
+		ac, fx = m.tickAutoGroundDeparture(ac)
+		combined = combined.merge(fx)
+
+		ac, fx = m.tickPatience(ac, elapsed)
+		combined = combined.merge(fx)
+
+		// Apply accumulated effects
+		m.score += combined.scoreDelta
+		for _, msg := range combined.messages {
+			m = m.addRadio(msg)
 		}
 
-		// TRACON auto-ground: landed aircraft auto-taxi to nearest available gate
-		if ac.State == aircraft.Landed && m.gameConfig.Role == config.RoleTRACON {
-			gate := m.findAvailableGate()
-			if gate != "" {
-				gateObj := m.gameMap.GateByID(gate)
-				if gateObj != nil {
-					node := m.gameMap.NodeByID(gateObj.NodeID)
-					if node != nil {
-						ac.AssignedGate = gate
-						ac.State = aircraft.Taxiing
-						ac.TaxiPath = [][2]int{{ac.GridX(), ac.GridY()}, {node.X, node.Y}}
-						ac.TaxiPathIndex = 0
-					}
-				}
-			}
-		}
-
-		// Check taxi completion
-		if ac.State == aircraft.Taxiing && len(ac.TaxiPath) == 0 && ac.AssignedGate != "" {
-			ac.State = aircraft.AtGate
-			m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
-				fmt.Sprintf("%s at gate %s", ac.Callsign, ac.AssignedGate)))
-		}
-
-		// TRACON auto-departures: automate the ground sequence
-		if m.gameConfig.Role == config.RoleTRACON {
-			switch ac.State {
-			case aircraft.Pushback:
-				// Auto-taxi: find path to nearest hold-short node
-				if len(ac.TaxiPath) == 0 {
-					hsNode := m.findNearestHoldShort(ac)
-					if hsNode != nil {
-						ac.State = aircraft.Taxiing
-						ac.TaxiPath = [][2]int{{ac.GridX(), ac.GridY()}, {hsNode.X, hsNode.Y}}
-						ac.TaxiPathIndex = 0
-					}
-				}
-			case aircraft.Taxiing:
-				// When taxi path completes without a gate, transition to hold short
-				if len(ac.TaxiPath) == 0 && ac.AssignedGate == "" {
-					ac.State = aircraft.HoldShort
-				}
-			case aircraft.HoldShort:
-				// Auto-takeoff
-				ac = ac.ResetTickCount()
-				ac.State = aircraft.OnRunway
-				ac.TaxiPath = nil
-				ac.TaxiRoute = nil
-			}
-		}
-
-		// Patience system — airborne aircraft waiting for instructions
-		if ac.State.IsAirborne() && ac.PatienceMax > 0 {
-			ac.PatienceTicks++
-
-			// Check if it's time to nag
-			nagThreshold := ac.PatienceMax + ac.PatienceNagCount*aircraft.PatienceNagEvery
-			if ac.PatienceTicks >= nagThreshold {
-				ac.PatienceNagCount++
-				switch {
-				case ac.PatienceNagCount >= aircraft.PatienceLeaveAt:
-					// Aircraft leaves — score penalty
-					m.score--
-					if m.score < 0 {
-						m.score = 0
-					}
-					m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
-						fmt.Sprintf("%s leaving your airspace, good day", ac.Callsign)))
-					continue // skip adding to activeAircraft
-				case ac.PatienceNagCount >= aircraft.PatiencePenaltyAt:
-					m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
-						fmt.Sprintf("%s requesting ANY instructions!", ac.Callsign)))
-				default:
-					m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
-						fmt.Sprintf("%s still waiting for vectors", ac.Callsign)))
-				}
-			}
-		}
-
-		// Remove completed arrivals (at gate)
-		if ac.State == aircraft.AtGate {
+		// Remove aircraft that left or completed arrival
+		if combined.remove || ac.State == aircraft.AtGate {
 			continue
 		}
 		activeAircraft[k] = ac
 	}
+	if m.score < 0 {
+		m.score = 0
+	}
 	m.aircraft = activeAircraft
 
+	// Phase 5: spawning
 	if m.spawner.ShouldSpawn(elapsed, len(m.aircraft)) {
 		countBefore := len(m.aircraft)
-		// Alternate between arrivals and departures
 		if m.spawnDeparture && len(m.gameMap.Gates) > 0 {
 			m = m.trySpawnDeparture(elapsed)
 		} else {
@@ -785,7 +858,6 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 					radio.FormatEnteringAirspace(ac.Callsign, ac.Heading, ac.Altitude)))
 			}
 		}
-		// Only toggle on successful spawn
 		if len(m.aircraft) > countBefore {
 			m.spawnDeparture = !m.spawnDeparture
 		}

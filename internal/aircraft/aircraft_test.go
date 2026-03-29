@@ -392,6 +392,29 @@ func TestForcedTurnRight(t *testing.T) {
 	}
 }
 
+func TestWithStateImmutability(t *testing.T) {
+	ac := New("T1", 50, 50, 90, 5, 3)
+	crashed := ac.WithState(Crashed)
+	if crashed.State != Crashed {
+		t.Errorf("expected Crashed, got %v", crashed.State)
+	}
+	if ac.State != Approaching {
+		t.Error("original should be unchanged (immutability)")
+	}
+}
+
+func TestWithHeadingImmutability(t *testing.T) {
+	ac := New("T1", 50, 50, 90, 5, 3)
+	ac.TargetHeading = 90
+	turned := ac.WithHeading(270)
+	if turned.Heading != 270 || turned.TargetHeading != 270 {
+		t.Errorf("expected heading=270, target=270, got %d, %d", turned.Heading, turned.TargetHeading)
+	}
+	if ac.Heading != 90 || ac.TargetHeading != 90 {
+		t.Error("original should be unchanged (immutability)")
+	}
+}
+
 func TestExpeditedAltitude(t *testing.T) {
 	ac := New("T1", 50, 50, 90, 5, 3)
 	ac.TargetAltitude = 10
