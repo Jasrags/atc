@@ -2,264 +2,135 @@
 
 ## Overview
 
-You are the controller managing aircraft from approach through landing, ground taxi, and departure. Arrivals enter your airspace from the radar edges — guide them to the runway, land them, and taxi them to a gate. Departures spawn at gates — push them back, taxi to the runway, and clear them for takeoff. Each successful arrival (at gate) and departure (leaves airspace) scores a point. If two aircraft collide, the game is over.
+You are an air traffic controller guiding aircraft through approach, landing, ground taxi, and departure. Arrivals enter your airspace and must be vectored to the runway. Departures spawn at gates and need pushback, taxi, and takeoff clearance. Each successful operation scores a point. Collisions end the game.
 
-## Real-World ATC Flow
-
-This game simulates several positions in the real ATC system. Here's how it maps:
-
-### Arrivals
-
-```
-Center (ARTCC)
-  |  hands off ~30-50nm out, descending from cruise
-  v
-TRACON Approach            <-- YOU: vector, sequence, clear approach
-  |  vectors, sequences, issues approach clearance
-  v
-Tower (Local Control)      <-- YOU: clear to land, watch runway
-  |  clears to land, clears when runway vacated
-  v
-Ground Control             <-- YOU: taxi to gate
-  |  taxis to gate
-  v
-Ramp (arrival complete)
-```
-
-### Departures
-
-```
-Clearance Delivery
-  |  IFR clearance (route, altitude, squawk)
-  v
-Ground Control             <-- YOU: pushback, taxi to runway
-  |  pushback approval, taxi routing to hold short line
-  v
-Tower (Local Control)      <-- YOU: takeoff clearance
-  |  position and hold, takeoff clearance, initial heading/altitude
-  |  watches for runway conflicts, wake turbulence spacing
-  v
-TRACON Departure           <-- YOU: climb out, vectors
-  |  radar contact, climb instructions, vectors
-  |  deconflicts with arrival traffic
-  v
-Center (ARTCC)             (departure leaves your airspace — scored)
-```
-
-In the game, you handle all of these roles simultaneously through the command input.
-
-## Getting Started
-
-Launch the game:
+## Quick Start
 
 ```bash
-./atc
+make run          # TRACON mode (approach radar)
+make run-tower    # Tower mode (airport surface)
+make run-combined # Combined mode (both)
+make dev          # Developer mode with /commands
 ```
 
-You'll see the main menu. Press **N** (or select "New Game" and press Enter) to open the game setup screen.
+## Controller Roles
 
-## Game Setup
+The game offers three perspectives on the same airspace:
 
-Before each game, you configure five settings using a combined setup screen:
+### TRACON (Approach/Departure)
 
-```
-  GAME SETUP
+You manage the terminal airspace — vectoring arrivals toward the runway and guiding departures to climb out. The STARS-style radar shows aircraft as bright green dots with history trails and data blocks. Ground operations are automated.
 
-  Map
-  > San Diego TRACON
-    Chicago O'Hare
-    Tutorial
+### Tower (Local/Ground Control)
 
-  Difficulty
-    Easy
-  > Normal
-    Hard
+You manage the runway environment and airport surface. TRACON delivers arrivals pre-sequenced on final approach. You handle landing clearances, taxi routing, pushback, and takeoff. The ASDE-X surface radar shows runways as filled rectangles, taxiways as labeled paths, and aircraft as directional chevrons. An approach inset shows incoming traffic.
 
-  Game Mode
-  > Arrivals Only
+### Combined
 
-  Callsign Style
-  > ICAO (AA123)
-    Short (A12)
+Full control of both approach and surface — the most challenging mode.
 
-  Plane Trails
-    On
-  > Off
-```
+## The Display
 
-### Navigation
+### TRACON Radar (STARS-style)
 
-| Key | Action |
-|-----|--------|
-| Tab | Move to next section |
-| Shift+Tab | Move to previous section |
-| Up/Down (or k/j) | Select option within section |
-| Enter | Start the game |
-| Esc | Back to main menu |
+- **Aircraft**: Bright green dots with fading history trails showing their path
+- **Data blocks**: Callsign + altitude (hundreds of feet) + speed, connected by leader lines
+- **Runway**: White centerline with dashed extended approach course
+- **Fixes**: Dim blue triangles (waypoints), circles (VORs/airports), crosses (intersections)
+- **Range rings**: Concentric circles centered on the airport
+- **Compass rose**: Heading marks every 10 degrees around the scope edge
 
-### Settings Explained
+### Tower Radar (ASDE-X-style)
 
-**Map** controls the radar size, runway layout, and navigation fixes:
+- **Runway**: Filled gray rectangle with threshold markings and centerline dashes
+- **Taxiways**: Gray paths with letter labels (A, B, C, D...)
+- **Gates**: Blue rectangles with ID labels (G1, G2...)
+- **Hold-short**: Yellow dashed bars across taxiways
+- **Aircraft**: Directional chevrons — green for arrivals, cyan for departures
+- **Approach inset**: Small box in the corner showing incoming traffic on final
 
-| Map | Size | Runways | Best for |
-|-----|------|---------|----------|
-| Tutorial | 90x40 | 9/27 | Learning the basics |
-| San Diego TRACON | 120x50 | 9/27 | Single runway, realistic fixes |
-| Chicago O'Hare | 120x50 | 10L/28R, 10R/28L | Parallel runway challenge |
+### Flight Strip Sidebar
 
-**Difficulty** affects how fast aircraft spawn and how many you'll manage:
+The right panel shows a strip for each aircraft:
 
-| | Easy | Normal | Hard |
-|--|------|--------|------|
-| Spawn rate | Slow (1.5x) | Standard | Fast (0.6x) |
-| Max aircraft | 8 | 15 | 25 |
-| Speed range | 1-3 | 2-4 | 2-5 |
+- **Callsign** (color-coded): green = normal, yellow = landing/waiting, orange = impatient, red = angry/conflict, cyan = ground
+- **State tag**: APPR, LAND, DEPT, TAXI, GATE, PUSH, HOLD, TKOF
+- **Airborne info**: heading, altitude with climb/descend arrow, speed, pending targets
+- **Ground info**: gate assignment, runway assignment
+- **Tower mode**: strips split into ARRIVALS and DEPARTURES sections
 
-**Callsign Style** changes the format of aircraft identifiers:
-- **ICAO** (AA123) — realistic airline + flight number, 5 characters
-- **Short** (A12) — single letter + 2 digits, faster to type
+Click any strip to auto-fill the callsign in the command input.
 
-**Plane Trails** shows the last 5 positions of each aircraft as dots on the radar. Helpful for visualizing flight paths and turn arcs.
+### HUD Bar
 
-## The Radar Screen
+Top of screen showing: role, score, aircraft count, near misses, elapsed time, speed/freeze status.
 
-Once the game starts, your screen is divided into three areas:
+### Radio Log
 
-```
-+-- HUD (top) ----+-------- Flight Strips (right) ---+
-|  Score, aircraft |  AA123           APPR            |
-|  count, time     |   090  ↓08  S3                   |
-|                  |   → H270 A3                      |
-+-- Radar ---------+  ─────────────────────────────── |
-| ╭──────────────╮ |  UA456           TAXI            |
-| │  ^ MAFAN     │ |   Gate G2 | TX A B              |
-| │       * NKX  │ |  ─────────────────────────────── |
-| │              │ |  DL789           GATE            |
-| │  9 ======= 27│ |   Gate G1 | Rwy 27              |
-| │    |--A--|   │ |                                   |
-| │    # # #     │ |                                   |
-| ╰──────────────╯ |                                   |
-+------------------+-----------------------------------+
-| RADIO                                                |
-| 01:23 AA123: approach, with you, heading 270 at 5000 |
-| 01:25 ATC → AA123: turn right heading 090, ALT 3     |
-| 01:30 DL789: at gate G1, requesting pushback          |
-+------------------------------------------------------+
-  ATC> AA123 _
-  Commands: [H] Heading  [A] Altitude  [S] Speed  [L] Land
-```
+Above the command input, showing the last 5 messages:
+- **Cyan**: Pilot messages (check-ins, requests)
+- **Green**: Your ATC commands (translated to phraseology)
+- **Gray**: System messages
+- **Yellow**: Urgent (traffic alerts)
+- **Red**: Emergency (collisions)
 
-### Radar Symbols
+## Controls
 
-**Airborne aircraft:**
+### Camera
 
-| Symbol | Meaning |
-|--------|---------|
-| `@` | Aircraft in flight (with callsign label) |
-| `X` | Crashed aircraft |
-| `.` | Trail dot (previous position) |
+| Control | Action |
+|---------|--------|
+| Scroll wheel | Zoom in/out (centered on cursor, 0.5x-8x) |
+| Click + drag | Pan the viewport |
+| Arrow keys | Pan (when input is empty) |
+| +/- | Zoom from keyboard (when input is empty) |
+| Home | Reset to default view for current role |
 
-**Ground aircraft:**
+### Time
 
-| Symbol | Meaning |
-|--------|---------|
-| `v` | Taxiing |
-| `#` | At gate |
-| `<` | Pushing back |
-| `!` | Holding short of runway |
-| `>` | On runway (taking off) |
+| Control | Action |
+|---------|--------|
+| p | Freeze / unfreeze time (when input is empty) |
+| [ | Slow down (1x minimum) |
+| ] | Speed up (12x maximum) |
 
-**Map features:**
+### Game
 
-| Symbol | Meaning |
-|--------|---------|
-| `=` | Runway |
-| `9` / `27` | Runway heading numbers |
-| `-` / `\|` | Taxiway |
-| `#` | Gate position (blue) |
-| `:` | Hold-short line (yellow) |
-| `^` | Waypoint fix |
-| `*` | VOR navigation aid |
-| `o` | Airport |
-| `+` | Intersection fix |
+| Control | Action |
+|---------|--------|
+| Type + Enter | Submit ATC command |
+| Click strip | Select aircraft (fills callsign in input) |
+| Esc | Quit |
+| R | Restart (on game over screen) |
 
-### Flight Strips
+### Minimap
 
-The right panel shows a strip for each active aircraft:
-
-```
-──────────────────────────────
-AA123           APPR
- 090  ↓08  S3
- → H270 A3
-──────────────────────────────
-```
-
-- **Line 1**: Callsign (color-coded by state) and status
-  - APPR = approaching (green)
-  - LAND = cleared to land (orange)
-  - DEPT = departing (green)
-  - TAXI = taxiing on ground (yellow)
-  - GATE = at gate (yellow)
-  - PUSH = pushing back (yellow)
-  - HOLD = holding short of runway (yellow)
-  - TKOF = on runway, taking off (yellow)
-  - DONE = landed (dim)
-  - CRASH = crashed (red)
-- **Line 2**: Airborne aircraft show heading, altitude (with ↑/↓ arrows), and speed. Ground aircraft show gate assignment, runway, and taxi route.
-- **Line 3**: Pending commands (only shown for airborne aircraft when targets differ from current values)
-
-**Click any flight strip** to auto-fill the callsign in the command input. Then you only need to type the command itself.
-
-The strip panel scrolls automatically when there are many aircraft. Use the mouse wheel to scroll through strips.
-
-### HUD
-
-The top bar shows a stats table:
-
-| Field | Meaning |
-|-------|---------|
-| SCORE | Arrivals at gate + departures leaving airspace |
-| AIRCRAFT | Currently active aircraft count |
-| TIME | Elapsed game time (MM:SS) |
-
-### Radio Panel
-
-Between the game area and the command input, the radio panel shows all communications:
-
-- **Inbound** (pilot → you): Aircraft check-ins, pushback requests, position reports — shown in cyan
-- **Outbound** (you → pilot): Your commands translated into ATC phraseology — shown in green
-- **Emergency**: Collision alerts — shown in red
-
-The radio panel scrolls. Recent messages appear at the bottom.
+Appears automatically in the bottom-left corner when zoomed past 1.5x. Shows the full map with aircraft as dots and your current viewport outlined.
 
 ## Issuing Commands
 
-Type commands in the input bar at the bottom and press Enter:
+Type in the command prompt at the bottom and press Enter:
 
 ```
 <CALLSIGN> <COMMAND> [<COMMAND>...]
 ```
 
+Commands can be chained: `AA123 H270 A3 S2` issues heading, altitude, and speed in one go.
+
 ### Airborne Commands
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `H<0-359>` | Set heading (degrees) | `AA123 H270` |
+| `H<0-359>` | Set heading | `AA123 H270` |
 | `A<1-40>` | Set altitude (thousands of feet) | `AA123 A3` |
 | `S<1-5>` | Set speed | `AA123 S2` |
 | `L [runway]` | Clear to land (optionally on specific runway) | `AA123 L` or `AA123 L 28R` |
-| `D <fix>` | Direct to named waypoint (auto-navigates) | `AA123 D MAFAN` |
-| `TL <heading>` | Turn LEFT to heading (forces direction) | `AA123 TL 270` |
-| `TR <heading>` | Turn RIGHT to heading (forces direction) | `AA123 TR 090` |
+| `D <fix>` | Direct to waypoint (auto-navigates) | `AA123 D MAFAN` |
+| `HLD <fix>` | Hold at fix (right-turn racetrack) | `AA123 HLD BOKNE` |
+| `TL <heading>` | Turn LEFT to heading | `AA123 TL 270` |
+| `TR <heading>` | Turn RIGHT to heading | `AA123 TR 090` |
 | `EX` | Expedite altitude change (2x rate) | `AA123 A3 EX` |
 | `GA` | Go around (abort landing) | `AA123 GA` |
-
-Airborne commands can be chained: `AA123 H270 A3 S2` or `AA123 D MAFAN A3 EX`
-
-**Direct to fix** is a key TRACON command — instead of manually vectoring with headings, point the aircraft at a named waypoint on the radar. The aircraft recalculates its heading each tick to track toward the fix, and clears the target when it arrives within 2 grid cells.
-
-**Turn left/right** overrides the default shortest-path turn. Useful when you need a specific turn direction to avoid traffic or follow a published procedure.
 
 ### Ground Commands
 
@@ -272,164 +143,150 @@ Airborne commands can be chained: `AA123 H270 A3 S2` or `AA123 D MAFAN A3 EX`
 | `T` | Clear for takeoff | `DL789 T` |
 | `GATE <gate>` | Assign gate (after landing) | `AA123 GATE G2` |
 
-### Command Tree (Interactive)
+### Command Availability by Role
 
-When you select an aircraft (click a strip or type a callsign followed by a space), a context-sensitive command menu appears below the input:
-
-```
-ATC> AA123 _
-Commands: [H] Heading  [A] Altitude  [S] Speed  [L] Land
-```
-
-Click any option or press its key. The tree adapts to the aircraft's state — ground aircraft show `PB`, `TX`, `HS`, `T` instead of airborne commands. After choosing a command with a value (like heading), the tree shows value options:
-
-```
-ATC> AA123 H _
-Values: [030] [060] [090] [120] [150] [180] [210] [240] [270] [300] [330] [360]
-```
-
-After picking a value, chain more commands or press Enter to send.
-
-### Quick Entry with Mouse
-
-**Click a flight strip** to auto-fill the callsign, then type or click commands:
-
-```
-Click strip for AA123 → input shows "AA123 "
-Type: H270 A3
-Press Enter
-```
+| Command | TRACON | Tower | Combined |
+|---------|--------|-------|----------|
+| H, A, S, L, GA | Yes | Yes | Yes |
+| D, HLD, TL, TR, EX | Yes | No | Yes |
+| PB, TX, HS, CR, T, GATE | No | Yes | Yes |
 
 ## Arrival Flow
 
-### 1. Approach and Landing
+### 1. Vector to Runway
 
-To successfully land an aircraft, all four conditions must be met:
+Aircraft enter at the radar edges. Guide them toward the runway:
 
-1. **Clearance**: You must issue the `L` command (e.g., `AA123 L`)
-2. **Position**: Aircraft must be within 2 grid cells of the runway
-3. **Heading**: Within +/-10 degrees of the runway heading
-4. **Altitude**: Must be at altitude 1 (1000ft)
+1. Set heading toward the runway: `AA123 H270`
+2. Begin descent: `AA123 A5`, then later `AA123 A1`
+3. Adjust speed if needed: `AA123 S2`
 
-A typical approach sequence:
+Or use direct-to-fix: `AA123 D TORIE` to navigate to a waypoint near the runway, then vector from there.
 
-1. Aircraft enters at the edge — note its heading, altitude, and position
-2. Issue heading command to aim toward the runway: `AA123 H270`
-3. Begin descent: `AA123 A5` then later `AA123 A1`
-4. When close and aligned, clear to land: `AA123 L`
-5. The aircraft lands automatically when all conditions are met
+### 2. Clear to Land
 
-### 2. Taxi to Gate
+When the aircraft is:
+- Within 2 grid cells of the runway
+- Within +/-10 degrees of the runway heading
+- At altitude 1 (1000ft)
 
-After landing, the aircraft stays on the map in DONE state. Assign it a gate:
+Issue: `AA123 L`
+
+The aircraft lands automatically when all conditions are met.
+
+### 3. Taxi to Gate (Combined/Tower mode)
+
+After landing, assign a gate: `AA123 GATE G2`
+
+The aircraft taxis to the gate. Arrival complete, +1 score.
+
+### Holding
+
+If you need an aircraft to wait (e.g., traffic ahead), put it in a hold:
 
 ```
-AA123 GATE G2
+AA123 HLD BOKNE
 ```
 
-The aircraft taxis directly to the assigned gate. When it arrives, it's removed from the map (arrival complete, +1 score).
-
-**Tips:**
-- Start turning early — turns take ~9 seconds for 90 degrees
-- Altitude changes are gradual — descend well before the runway
-- Speed affects how fast aircraft cross the map; slower gives more time to align
-- Watch the flight strip's arrow (↑/↓) to confirm altitude is changing
-- The pending targets line (→ H270 A3) confirms your commands were received
+The aircraft flies to the fix and enters a standard right-turn racetrack pattern. It continues holding until you issue a new command (heading, direct, or land clears the hold).
 
 ## Departure Flow
 
-Departures spawn at gates and announce themselves on the radio:
+Departures spawn at gates and request pushback on the radio.
 
-```
-01:30 DL789: at gate G1, requesting pushback
-```
+### Full Sequence
 
-### Full Departure Sequence
+1. **Pushback**: `DL789 PB 27` (approve, expect runway 27)
+2. **Taxi**: `DL789 TX B A D` (via taxiways B, A, D)
+3. **Hold short**: `DL789 HS 27`
+4. **Takeoff**: `DL789 T`
+5. Aircraft rolls, lifts off, climbs to 5000ft on runway heading
+6. Scores +1 when leaving airspace (or at altitude 3 in Tower mode)
 
-1. **Pushback**: `DL789 PB 27` (approve pushback, expect runway 27)
-2. **Taxi to runway**: `DL789 TX B A D` (taxi via taxiways B, A, D to the runway end)
-3. **Hold short**: `DL789 HS 27` (hold short of runway 27)
-4. **Takeoff**: `DL789 T` (cleared for takeoff)
-5. Aircraft rolls on runway (~1.5 seconds), lifts off, climbs to 5000ft heading in the runway direction
-6. Departing aircraft scores +1 when it leaves your airspace
+## Separation
 
-### Runway Headings
+Aircraft must maintain minimum separation:
+- **Lateral**: 3 grid cells
+- **Vertical**: 1 altitude unit (1000ft) when laterally close
 
-Each map shows runway heading numbers at each end (e.g., `9` and `27` for runway 9/27). The heading number is the runway direction divided by 10. To land on runway 27, your aircraft needs a heading near 270.
+Violations trigger:
+- TRAFFIC ALERT radio message
+- Violating aircraft blink red on radar
+- Score penalty (-50 per violation event)
+- Near-miss counter in HUD
 
-Chicago O'Hare has parallel runways (10L/28R and 10R/28L). Aircraft can land on either one.
+**Collision** (same position + same altitude) = game over.
 
-## Game States
+## Pilot Patience
 
-### Pause
+Aircraft expect timely instructions. If ignored:
+- **30 seconds**: "still waiting for vectors" (strip turns yellow)
+- **40 seconds**: "requesting ANY instructions!" (strip turns orange)
+- **50 seconds**: Aircraft leaves your airspace, -1 score (strip blinks red)
 
-Press **P** to pause. The game freezes — no aircraft movement or spawning. Press **P** again to resume. You can also press **Esc** to return to the main menu (abandons the current game) or **Q** to quit entirely.
+Any command resets the patience timer.
 
-### Game Over
+## Scoring
 
-A collision occurs when two aircraft occupy the same grid cell at the same altitude. Both aircraft are marked as crashed and the game ends.
+| Event | Points |
+|-------|--------|
+| Aircraft lands | +1 |
+| Departure leaves airspace | +1 |
+| Tower: departure handed off at altitude 3 | +1 |
+| Separation violation | -50 |
+| Aircraft leaves due to impatience | -1 |
 
-From the game over screen:
-- **R** — restart with the same settings
-- **Esc** — return to main menu
-- **Q** — quit
-
-### Help
-
-Press **?** at any time during gameplay to see the in-game help screen, which shows command syntax, landing requirements, and all keybindings. Press **?** or **Esc** to return.
-
-## Keybindings Reference
-
-### During Gameplay
-
-| Key | Action |
-|-----|--------|
-| Enter | Submit command |
-| P | Pause / Resume |
-| ? | Toggle help |
-| Esc | Back to menu |
-| Ctrl+C | Force quit |
-| Mouse click (strip) | Auto-fill callsign |
-| Mouse wheel | Scroll flight strips |
-
-### Main Menu
-
-| Key | Action |
-|-----|--------|
-| Up/Down (or k/j) | Navigate |
-| Enter | Select |
-| N | New game |
-| H or ? | Help |
-| Q or Esc | Quit |
-
-### Game Over
-
-| Key | Action |
-|-----|--------|
-| R | Restart |
-| Esc or Q | Return to menu |
+Score cannot go below 0.
 
 ## Difficulty Progression
 
-Within a single game session, difficulty increases over time regardless of your chosen difficulty level:
+Within each game, difficulty increases over time:
+- **Aircraft cap**: Starts at 5, increases by 2 per minute, capped by difficulty setting (Easy: 8, Normal: 15, Hard: 25)
+- **Spawn interval**: Starts at 5 seconds, decreases to 1.5 seconds over 5 minutes, scaled by difficulty
 
-- **Aircraft count ramp**: Starts at 5 max, increases by 2 per minute, capped at the difficulty ceiling (8/15/25)
-- **Spawn interval ramp**: Starts at 5 seconds between spawns, decreases to 1.5 seconds over 5 minutes, multiplied by the difficulty factor
+## Maps
 
-This means even on Easy, the game gets progressively harder. The difficulty setting controls the ceiling and rate of escalation.
+### San Diego (SAN)
 
-## Tips for New Players
+Single runway 9/27. Coastal approach from the west. 4 gates. Good for learning.
 
-1. **Start with Tutorial on Easy** — small map, slow spawns, plenty of time to learn
-2. **One aircraft at a time** — focus on getting one aircraft landed before managing multiples
-3. **Use Short callsigns** — "A12" is much faster to type than "AA123"
-4. **Click flight strips** — never type a callsign manually if you can click it
-5. **Use the command tree** — click options instead of memorizing commands
-6. **Turn early** — aircraft take ~9 seconds to turn 90 degrees at the game's turn rate
-7. **Descend early** — altitude changes are gradual; start descending well before the runway
-8. **Watch the pending line** — the "→ H270 A3" line on flight strips confirms your command was received
-9. **Use separation** — keep aircraft at different altitudes until they need to descend for landing
-10. **Enable plane trails** — visual path history helps you understand turn radius and approach angles
-11. **Assign gates quickly** — landed aircraft sit on the runway until you give them a gate
-12. **Process departures during lulls** — pushback and taxi commands when arrivals are stable
-13. **Watch the radio** — pilot requests tell you who needs attention next
+Fixes: MAFAN, BOKNE, TORIE, SARGS, SWATT, NKX, MZB, SAN, NZY, PGY, NRS, TIJ, UN, LOWMA, LYNDI, LUCKI
+
+### Chicago O'Hare (ORD)
+
+Parallel runways 10L/28R and 10R/28L. 4 gates between runways. Multi-runway challenge — use `L 28R` or `L 28L` to direct aircraft to specific runways.
+
+Fixes: PLANO, DUPAGE, CMSKY, MOBLE, ORD, MIDWY, PEKNY, BRAVE, GLENW, JOT
+
+### Tutorial
+
+Small map (90x40) with one runway 9/27 and 3 gates. Fewer fixes, less clutter. Best for first-time players.
+
+Fixes: NORTH, EAST, SOUTH, WEST, CTR
+
+## Developer Mode
+
+Launch with `make dev` or `./atc -dev` to enable `/` commands:
+
+| Command | Effect |
+|---------|--------|
+| `/god` | Toggle god mode (collisions don't end game) |
+| `/pause` | Toggle automatic spawner |
+| `/clear` | Remove all aircraft |
+| `/spawn` | Spawn one arrival |
+| `/spawn dep` | Spawn one departure at a gate |
+
+## Tips
+
+1. **Start with Tutorial on Easy** — small map, slow spawns, learn the basics
+2. **Use Short callsigns** (set via `--role` flag) — "A12" is faster to type than "AA123"
+3. **Click flight strips** — never type a callsign when you can click it
+4. **Turn and descend early** — turns take ~9 seconds for 90 degrees, altitude changes are gradual
+5. **Use direct-to-fix** — `D TORIE` is faster than manual heading vectors for long approaches
+6. **Separate with altitude** — keep aircraft at different altitudes until final approach
+7. **Use holds** — `HLD BOKNE` buys time when the runway is busy
+8. **Freeze time** — press `p` to pause and assess the situation before it gets overwhelming
+9. **Speed up during lulls** — press `]` to skip the quiet moments, `[` to slow back down
+10. **Zoom in** — scroll wheel to zoom into the airport surface for ground operations
+11. **Watch the radio** — pilot requests tell you who needs attention next
+12. **Process departures during lulls** — pushback and taxi when arrivals are stable
