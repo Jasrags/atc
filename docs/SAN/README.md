@@ -55,6 +55,21 @@ Source: FAA ADIP Portal, Cycle SW-3 (19 MAR 2026 to 16 APR 2026)
 | SW3TO.PDF | Takeoff Minimums (SW-3 region) |
 | SW3ALT.PDF | Alternate Minimums (SW-3 region) |
 
+## To Acquire
+
+Charts not yet downloaded from the FAA portal:
+
+| Chart | Type | Why |
+|-------|------|-----|
+| ILS RWY 27 | Approach | SAN's primary precision approach — may be combined with LOC 27 plate we have |
+| Harbor Visual RWY 27 | Visual Approach | Iconic SAN curved approach around the bay — great gameplay element |
+| Point Loma Visual RWY 27 | Visual Approach | Curved visual following the coastline |
+| VOR RWY 27 | Approach | Legacy non-precision approach, lower priority |
+| RNAV (GPS) RWY 9 | Approach | May not exist given terrain on RWY 9 side |
+| Additional SIDs | Departure | Only have IYLY9 and IZLZ9 — SAN may publish more |
+
+---
+
 ## Notes
 
 - Hot spot **HS1** is marked on the airport diagram (orange circle) near the general aviation parking / taxiway C-B intersection — elevated runway incursion risk area
