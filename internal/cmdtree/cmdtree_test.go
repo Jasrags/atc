@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/Jasrags/atc/internal/aircraft"
+	"github.com/Jasrags/atc/internal/config"
 )
 
 func TestResolveEmpty(t *testing.T) {
-	tree := Resolve("", aircraft.Approaching)
+	tree := Resolve("", aircraft.Approaching, config.RoleCombined)
 	if tree.Phase != PhaseIdle {
 		t.Errorf("expected PhaseIdle, got %d", tree.Phase)
 	}
@@ -17,14 +18,14 @@ func TestResolveEmpty(t *testing.T) {
 }
 
 func TestResolveCallsignNoSpace(t *testing.T) {
-	tree := Resolve("AA123", aircraft.Approaching)
+	tree := Resolve("AA123", aircraft.Approaching, config.RoleCombined)
 	if tree.Phase != PhaseIdle {
 		t.Errorf("expected PhaseIdle while still typing callsign, got %d", tree.Phase)
 	}
 }
 
 func TestResolveCallsignWithSpace(t *testing.T) {
-	tree := Resolve("AA123 ", aircraft.Approaching)
+	tree := Resolve("AA123 ", aircraft.Approaching, config.RoleCombined)
 	if tree.Phase != PhaseCallsign {
 		t.Errorf("expected PhaseCallsign, got %d", tree.Phase)
 	}
@@ -41,7 +42,7 @@ func TestResolveCallsignWithSpace(t *testing.T) {
 }
 
 func TestResolveCallsignLanding(t *testing.T) {
-	tree := Resolve("AA123 ", aircraft.Landing)
+	tree := Resolve("AA123 ", aircraft.Landing, config.RoleCombined)
 	if tree.Phase != PhaseCallsign {
 		t.Errorf("expected PhaseCallsign, got %d", tree.Phase)
 	}
@@ -55,7 +56,7 @@ func TestResolveCallsignLanding(t *testing.T) {
 }
 
 func TestResolveCommandPrefix(t *testing.T) {
-	tree := Resolve("AA123 H", aircraft.Approaching)
+	tree := Resolve("AA123 H", aircraft.Approaching, config.RoleCombined)
 	if tree.Phase != PhaseValue {
 		t.Errorf("expected PhaseValue, got %d", tree.Phase)
 	}
@@ -73,7 +74,7 @@ func TestResolveCommandPrefix(t *testing.T) {
 }
 
 func TestResolveAltitudePrefix(t *testing.T) {
-	tree := Resolve("AA123 A", aircraft.Approaching)
+	tree := Resolve("AA123 A", aircraft.Approaching, config.RoleCombined)
 	if tree.Phase != PhaseValue {
 		t.Errorf("expected PhaseValue, got %d", tree.Phase)
 	}
@@ -84,7 +85,7 @@ func TestResolveAltitudePrefix(t *testing.T) {
 }
 
 func TestResolveSpeedPrefix(t *testing.T) {
-	tree := Resolve("AA123 S", aircraft.Approaching)
+	tree := Resolve("AA123 S", aircraft.Approaching, config.RoleCombined)
 	if tree.Phase != PhaseValue {
 		t.Errorf("expected PhaseValue, got %d", tree.Phase)
 	}
@@ -98,7 +99,7 @@ func TestResolveSpeedPrefix(t *testing.T) {
 }
 
 func TestResolveChainAfterCommand(t *testing.T) {
-	tree := Resolve("AA123 H270 ", aircraft.Approaching)
+	tree := Resolve("AA123 H270 ", aircraft.Approaching, config.RoleCombined)
 	if tree.Phase != PhaseChain {
 		t.Errorf("expected PhaseChain, got %d", tree.Phase)
 	}
@@ -127,7 +128,7 @@ func TestResolveChainAfterCommand(t *testing.T) {
 }
 
 func TestResolveChainAfterLand(t *testing.T) {
-	tree := Resolve("AA123 L ", aircraft.Approaching)
+	tree := Resolve("AA123 L ", aircraft.Approaching, config.RoleCombined)
 	if tree.Phase != PhaseChain {
 		t.Errorf("expected PhaseChain, got %d", tree.Phase)
 	}
@@ -138,7 +139,7 @@ func TestResolveChainAfterLand(t *testing.T) {
 }
 
 func TestResolveChainAfterMultiple(t *testing.T) {
-	tree := Resolve("AA123 H270 A3 ", aircraft.Approaching)
+	tree := Resolve("AA123 H270 A3 ", aircraft.Approaching, config.RoleCombined)
 	if tree.Phase != PhaseChain {
 		t.Errorf("expected PhaseChain, got %d", tree.Phase)
 	}
@@ -156,14 +157,14 @@ func TestResolveChainAfterMultiple(t *testing.T) {
 
 func TestResolveMidTypeValue(t *testing.T) {
 	// User is typing a heading value — no tree
-	tree := Resolve("AA123 H27", aircraft.Approaching)
+	tree := Resolve("AA123 H27", aircraft.Approaching, config.RoleCombined)
 	if tree.Phase != PhaseIdle {
 		t.Errorf("expected PhaseIdle while typing value, got %d", tree.Phase)
 	}
 }
 
 func TestResolveHeading360Maps000(t *testing.T) {
-	tree := Resolve("AA123 H", aircraft.Approaching)
+	tree := Resolve("AA123 H", aircraft.Approaching, config.RoleCombined)
 	for _, opt := range tree.Options {
 		if opt.Label == "360" {
 			if opt.Value != "000" {

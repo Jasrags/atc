@@ -57,6 +57,40 @@ func (d Difficulty) Params() DifficultyParams {
 	}
 }
 
+// Role defines the player's controller position, scoping commands and automation.
+type Role int
+
+const (
+	RoleTRACON   Role = iota // Approach/departure — ground is automated
+	RoleTower                // Local/ground control — approach is automated
+	RoleCombined             // Both TRACON + Tower (hardest)
+)
+
+func (r Role) String() string {
+	switch r {
+	case RoleTRACON:
+		return "TRACON"
+	case RoleTower:
+		return "Tower"
+	case RoleCombined:
+		return "Combined"
+	default:
+		return "TRACON"
+	}
+}
+
+// IsGroundCommand reports whether a command keyword is a ground/tower command.
+func (r Role) IsCommandAllowed(cmd string) bool {
+	groundCmds := map[string]bool{"PB": true, "TX": true, "HS": true, "CR": true, "GATE": true, "T": true}
+	switch r {
+	case RoleTRACON:
+		return !groundCmds[cmd]
+	case RoleTower, RoleCombined:
+		return true
+	}
+	return true
+}
+
 // GameMode controls which types of aircraft traffic are active.
 type GameMode int
 
@@ -94,22 +128,29 @@ func (c CallsignStyle) String() string {
 
 // GameConfig holds all user-configurable game settings.
 type GameConfig struct {
-	MapID        string
-	Difficulty   Difficulty
-	GameMode     GameMode
+	MapID         string
+	Role          Role
+	Difficulty    Difficulty
+	GameMode      GameMode
 	CallsignStyle CallsignStyle
-	PlaneTrails  bool
+	PlaneTrails   bool
 }
 
 // DefaultConfig returns the default game configuration.
 func DefaultConfig() GameConfig {
 	return GameConfig{
 		MapID:         "san",
+		Role:          RoleTRACON,
 		Difficulty:    DifficultyNormal,
 		GameMode:      ModeArrivalsOnly,
 		CallsignStyle: CallsignICAO,
 		PlaneTrails:   false,
 	}
+}
+
+// RoleOptions returns the display labels for role selection.
+func RoleOptions() []string {
+	return []string{"TRACON", "Tower", "Combined"}
 }
 
 // DifficultyOptions returns the display labels for difficulty selection.

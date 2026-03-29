@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Jasrags/atc/internal/aircraft"
+	"github.com/Jasrags/atc/internal/config"
 )
 
 // Phase represents the current stage of command input.
@@ -76,7 +77,7 @@ var holdShortCommands = []commandDef{
 
 // Resolve examines the current input text and the selected aircraft's state
 // to determine what command tree options to show.
-func Resolve(inputText string, acState aircraft.State) Tree {
+func Resolve(inputText string, acState aircraft.State, role config.Role) Tree {
 	tokens := strings.Fields(strings.TrimSpace(inputText))
 
 	// No tokens or empty input — idle, no tree
@@ -92,7 +93,7 @@ func Resolve(inputText string, acState aircraft.State) Tree {
 		}
 		return Tree{
 			Phase:   PhaseCallsign,
-			Options: commandOptions(acState),
+			Options: filterByRole(commandOptions(acState), role),
 		}
 	}
 
@@ -119,7 +120,7 @@ func Resolve(inputText string, acState aircraft.State) Tree {
 		// Last token was a no-value command (L, GA) or a command+value (H270)
 		return Tree{
 			Phase:   PhaseChain,
-			Options: chainOptions(acState, tokens),
+			Options: chainOptions(acState, tokens, role),
 		}
 	}
 
@@ -127,7 +128,7 @@ func Resolve(inputText string, acState aircraft.State) Tree {
 	if len(lastToken) >= 2 && isCommandPrefix(string(lastToken[0])) {
 		return Tree{
 			Phase:   PhaseChain,
-			Options: chainOptions(acState, tokens),
+			Options: chainOptions(acState, tokens, role),
 		}
 	}
 
@@ -244,7 +245,7 @@ func speedOptions() []Option {
 	return options
 }
 
-func chainOptions(state aircraft.State, tokens []string) []Option {
+func chainOptions(state aircraft.State, tokens []string, role config.Role) []Option {
 	// Build set of commands already used
 	used := make(map[string]bool)
 	for _, t := range tokens[1:] {
@@ -296,4 +297,19 @@ func chainOptions(state aircraft.State, tokens []string) []Option {
 	})
 
 	return options
+}
+
+// filterByRole removes options that the current role doesn't allow.
+func filterByRole(options []Option, role config.Role) []Option {
+	if role == config.RoleCombined || role == config.RoleTower {
+		return options
+	}
+	// TRACON: filter out ground commands
+	var filtered []Option
+	for _, opt := range options {
+		if role.IsCommandAllowed(opt.Value) || opt.IsSubmit {
+			filtered = append(filtered, opt)
+		}
+	}
+	return filtered
 }

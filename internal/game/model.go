@@ -53,11 +53,12 @@ const (
 // Setup section indices
 const (
 	setupMap       = 0
-	setupDiff      = 1
-	setupMode      = 2
-	setupCallsign  = 3
-	setupTrails    = 4
-	setupSections  = 5
+	setupRole      = 1
+	setupDiff      = 2
+	setupMode      = 3
+	setupCallsign  = 4
+	setupTrails    = 5
+	setupSections  = 6
 )
 
 var mainMenuItems = []ui.MenuItem{
@@ -116,6 +117,7 @@ func NewModel() Model {
 		help:       h,
 		setupSelections: [setupSections]int{
 			0, // map: first
+			0, // role: TRACON
 			1, // difficulty: Normal
 			0, // mode: Arrivals Only
 			0, // callsign: ICAO
@@ -243,6 +245,8 @@ func (m Model) setupSectionMax(section int) int {
 	switch section {
 	case setupMap:
 		return len(m.maps) - 1
+	case setupRole:
+		return len(config.RoleOptions()) - 1
 	case setupDiff:
 		return len(config.DifficultyOptions()) - 1
 	case setupMode:
@@ -284,6 +288,7 @@ func (m Model) handleSetupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) buildConfigFromSetup() config.GameConfig {
 	return config.GameConfig{
 		MapID:         m.maps[m.setupSelections[setupMap]].ID,
+		Role:          config.Role(m.setupSelections[setupRole]),
 		Difficulty:    config.Difficulty(m.setupSelections[setupDiff]),
 		GameMode:      config.GameMode(m.setupSelections[setupMode]),
 		CallsignStyle: config.CallsignStyle(m.setupSelections[setupCallsign]),
@@ -299,6 +304,7 @@ func (m Model) buildSetupSections() []ui.SetupSection {
 
 	return []ui.SetupSection{
 		{Title: "Map", Options: mapNames, Selected: m.setupSelections[setupMap]},
+		{Title: "Role", Options: config.RoleOptions(), Selected: m.setupSelections[setupRole]},
 		{Title: "Difficulty", Options: config.DifficultyOptions(), Selected: m.setupSelections[setupDiff]},
 		{Title: "Game Mode", Options: config.GameModeOptions(), Selected: m.setupSelections[setupMode]},
 		{Title: "Callsign Style", Options: config.CallsignStyleOptions(), Selected: m.setupSelections[setupCallsign]},
@@ -374,7 +380,7 @@ func (m Model) processCommand(input string) Model {
 		return m
 	}
 
-	newPlanes, changes, err := command.Execute(cmd, m.aircraft)
+	newPlanes, changes, err := command.Execute(cmd, m.aircraft, m.gameConfig.Role)
 	if err != nil {
 		m = m.addRadio(radio.SystemMessage(elapsed, err.Error(), radio.Normal))
 		return m
@@ -617,11 +623,55 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// TRACON auto-ground: landed aircraft auto-taxi to nearest available gate
+		if ac.State == aircraft.Landed && m.gameConfig.Role == config.RoleTRACON {
+			gate := m.findAvailableGate()
+			if gate != "" {
+				gateObj := m.gameMap.GateByID(gate)
+				if gateObj != nil {
+					node := m.gameMap.NodeByID(gateObj.NodeID)
+					if node != nil {
+						ac.AssignedGate = gate
+						ac.State = aircraft.Taxiing
+						ac.TaxiPath = [][2]int{{ac.GridX(), ac.GridY()}, {node.X, node.Y}}
+						ac.TaxiPathIndex = 0
+					}
+				}
+			}
+		}
+
 		// Check taxi completion
 		if ac.State == aircraft.Taxiing && len(ac.TaxiPath) == 0 && ac.AssignedGate != "" {
 			ac.State = aircraft.AtGate
 			m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
 				fmt.Sprintf("%s at gate %s", ac.Callsign, ac.AssignedGate)))
+		}
+
+		// TRACON auto-departures: automate the ground sequence
+		if m.gameConfig.Role == config.RoleTRACON {
+			switch ac.State {
+			case aircraft.Pushback:
+				// Auto-taxi: find path to nearest hold-short node
+				if len(ac.TaxiPath) == 0 {
+					hsNode := m.findNearestHoldShort(ac)
+					if hsNode != nil {
+						ac.State = aircraft.Taxiing
+						ac.TaxiPath = [][2]int{{ac.GridX(), ac.GridY()}, {hsNode.X, hsNode.Y}}
+						ac.TaxiPathIndex = 0
+					}
+				}
+			case aircraft.Taxiing:
+				// When taxi path completes without a gate, transition to hold short
+				if len(ac.TaxiPath) == 0 && ac.AssignedGate == "" {
+					ac.State = aircraft.HoldShort
+				}
+			case aircraft.HoldShort:
+				// Auto-takeoff
+				ac = ac.ResetTickCount()
+				ac.State = aircraft.OnRunway
+				ac.TaxiPath = nil
+				ac.TaxiRoute = nil
+			}
 		}
 
 		// Remove completed arrivals (at gate)
@@ -708,7 +758,7 @@ func (m Model) View() string {
 func (m Model) renderPlaying() string {
 	planes := m.sortedAircraft()
 
-	hud := ui.RenderHUD(m.score, len(planes), m.stopwatch.Elapsed())
+	hud := ui.RenderHUD(m.score, len(planes), m.stopwatch.Elapsed(), m.gameConfig.Role.String())
 	radarView := radar.Render(m.gameMap, planes)
 	sidebar := m.stripViewport.View()
 	gameArea := lipgloss.JoinHorizontal(lipgloss.Top, radarView, " ", sidebar)
@@ -747,7 +797,7 @@ func (m Model) resolveTree() Model {
 		}
 	}
 
-	m.cmdTree = cmdtree.Resolve(inputText, acState)
+	m.cmdTree = cmdtree.Resolve(inputText, acState, m.gameConfig.Role)
 	return m
 }
 
@@ -783,10 +833,52 @@ func (m Model) trySpawnDeparture(elapsed time.Duration) Model {
 		return m
 	}
 
+	// In TRACON mode, auto-pushback departures immediately
+	if m.gameConfig.Role == config.RoleTRACON {
+		ac.State = aircraft.Pushback
+	}
+
 	m.aircraft[ac.Callsign] = ac
 	m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
 		fmt.Sprintf("%s at gate %s, requesting pushback", ac.Callsign, ac.AssignedGate)))
 	return m
+}
+
+// findNearestHoldShort returns the nearest hold-short node to the aircraft, or nil if none.
+func (m Model) findNearestHoldShort(ac aircraft.Aircraft) *gamemap.TaxiNode {
+	gx, gy := ac.GridX(), ac.GridY()
+	bestDist := math.MaxFloat64
+	var bestNode *gamemap.TaxiNode
+	for i := range m.gameMap.TaxiNodes {
+		n := &m.gameMap.TaxiNodes[i]
+		if n.Type != gamemap.NodeHoldShort {
+			continue
+		}
+		dx := float64(n.X - gx)
+		dy := float64(n.Y - gy)
+		dist := dx*dx + dy*dy
+		if dist < bestDist {
+			bestDist = dist
+			bestNode = n
+		}
+	}
+	return bestNode
+}
+
+// findAvailableGate returns the ID of an unoccupied gate, or "" if none available.
+func (m Model) findAvailableGate() string {
+	occupied := make(map[string]bool)
+	for _, ac := range m.aircraft {
+		if ac.AssignedGate != "" {
+			occupied[ac.AssignedGate] = true
+		}
+	}
+	for _, g := range m.gameMap.Gates {
+		if !occupied[g.ID] {
+			return g.ID
+		}
+	}
+	return ""
 }
 
 // runwayHeading returns the heading of the named runway, or 0 if not found.

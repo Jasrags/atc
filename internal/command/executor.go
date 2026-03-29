@@ -5,10 +5,17 @@ import (
 	"strings"
 
 	"github.com/Jasrags/atc/internal/aircraft"
+	"github.com/Jasrags/atc/internal/config"
 )
 
 // Execute applies a parsed command to the aircraft map, returning a new map and list of changes applied.
-func Execute(cmd Command, planes map[string]aircraft.Aircraft) (map[string]aircraft.Aircraft, []string, error) {
+// The role parameter filters which commands are allowed.
+func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role) (map[string]aircraft.Aircraft, []string, error) {
+	// Role-based command filtering
+	if err := checkRolePermissions(cmd, role); err != nil {
+		return planes, nil, err
+	}
+
 	ac, exists := planes[cmd.Callsign]
 	if !exists {
 		return planes, nil, fmt.Errorf("unknown aircraft: %s", cmd.Callsign)
@@ -143,6 +150,31 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft) (map[string]aircr
 	newPlanes[cmd.Callsign] = ac
 
 	return newPlanes, changes, nil
+}
+
+// checkRolePermissions validates that the command is allowed for the current role.
+func checkRolePermissions(cmd Command, role config.Role) error {
+	if role == config.RoleTRACON {
+		if cmd.Takeoff {
+			return fmt.Errorf("takeoff commands not available in TRACON mode")
+		}
+		if cmd.PushbackApproved {
+			return fmt.Errorf("pushback commands not available in TRACON mode")
+		}
+		if len(cmd.TaxiRoute) > 0 {
+			return fmt.Errorf("taxi commands not available in TRACON mode")
+		}
+		if cmd.HoldShort != "" {
+			return fmt.Errorf("hold short commands not available in TRACON mode")
+		}
+		if cmd.CrossRunway != "" {
+			return fmt.Errorf("cross runway commands not available in TRACON mode")
+		}
+		if cmd.AssignGate != "" {
+			return fmt.Errorf("gate commands not available in TRACON mode")
+		}
+	}
+	return nil
 }
 
 func requireAirborne(ac aircraft.Aircraft) error {

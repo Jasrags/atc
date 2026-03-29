@@ -2,9 +2,66 @@
 
 Feature priorities for closing the gap with Tower!3D Pro and IATC4. Each feature is tracked here with status, and broken into implementation tasks when work begins.
 
-## Priority 1: Ground Operations MVP (Active)
+## Priority 1: Controller Role System
 
-**Status: In Progress**
+**Status: Not Started**
+
+The player selects a role at game start that defines their scope of responsibility, available commands, visible UI panels, and what the game automates. This is the foundation for all future features — each role plays like a different game.
+
+### Roles
+
+#### TRACON (Approach/Departure)
+
+You control aircraft from airspace entry to final approach handoff, and from departure handoff to airspace exit. The tower and ground are automated.
+
+| Aspect | Details |
+|--------|---------|
+| **Scope** | Airspace edge → ~5nm final (arrival) / climb-out → airspace edge (departure) |
+| **Commands** | H, A, S, L (clear approach), D (direct to fix), GA, EX, TL/TR |
+| **Automated** | Tower clears to land when aligned. Ground taxis to gate. Departures auto-taxi to runway and request handoff at climb-out. |
+| **UI** | Full radar scope, flight strips for all aircraft, radio comms. No ground detail. |
+| **Scoring** | +1 per arrival handed off to tower (aligned on final). +1 per departure that exits airspace. |
+| **Game over** | Collision or separation violation (once separation rules exist). |
+| **Feel** | Classic IATC4 / TRACON! gameplay. Vectors, sequencing, altitude management. |
+
+#### Tower (Local + Ground)
+
+You control the runway, the ground surface, and the immediate airfield. TRACON delivers arrivals on final and accepts departures after takeoff.
+
+| Aspect | Details |
+|--------|---------|
+| **Scope** | Final approach → landing → gate (arrivals). Gate → pushback → taxi → takeoff → initial climb (departures). |
+| **Commands** | L (clear to land), GA, T, PB, TX, HS, CR, GATE + limited H/A for go-arounds and initial departure climb |
+| **Automated** | TRACON sequences arrivals onto final — they arrive at ~5nm, aligned, descending. Departures handed off to TRACON after initial climb. |
+| **UI** | Zoomed airport surface view (taxiways, gates, runways prominent). Smaller approach radar inset. Flight strips split into arrival/departure sections. |
+| **Scoring** | +1 per arrival at gate. +1 per departure handed off to TRACON (altitude ≥ 3). |
+| **Game over** | Runway incursion (two aircraft on same runway), collision, or missed approach overflow. |
+| **Feel** | Tower!3D Pro gameplay. Runway management, taxi routing, ground conflicts. |
+
+### Implementation
+
+- [ ] Add `Role` enum to `config.GameConfig`: `RoleTRACON`, `RoleTower`
+- [ ] Add role selection to setup screen (new setup section between Map and Difficulty)
+- [ ] Role-aware command validation: reject commands not available for the current role
+- [ ] Role-aware command tree: only show options valid for the role
+- [ ] TRACON auto-ground: when role is TRACON, landed aircraft auto-taxi to gate (no GATE command needed)
+- [ ] TRACON auto-tower: when role is TRACON, aircraft on final auto-land when aligned (L command initiates approach, not individual landing clearance)
+- [ ] Tower auto-approach: when role is Tower, arrivals spawn pre-sequenced on ~5nm final at low altitude, already descending
+- [ ] Tower auto-departure: when role is Tower, departing aircraft auto-handoff to TRACON at altitude 3+
+- [ ] Tower zoomed view: airport surface fills most of the radar area, approach corridor shown as a small inset or strip
+- [ ] Split flight strip panels: arrivals on left, departures on right (Tower role)
+- [ ] Role-specific scoring and game-over conditions
+- [ ] Role shown in HUD
+
+### Future: Combined Role
+
+A third option for experienced players: handle TRACON + Tower simultaneously (current behavior). This is the hardest mode and essentially what the game does today without role filtering.
+
+---
+
+## Priority 2: Ground Operations MVP (Complete)
+
+**Status: Complete**
 
 Full ground operations bringing departures, taxi, and surface management together as one cohesive feature. Subsumes the original "Departures" and "Ground Operations" items. Built in phases — each phase delivers playable value.
 
@@ -107,7 +164,7 @@ Phases 1-6 together constitute the Ground Operations MVP. Phases 1-2 (radio + co
 
 ---
 
-## Priority 2: Separation Rules (Future)
+## Priority 3: Separation Rules (Future)
 
 **Status: Not Started**
 
@@ -122,7 +179,7 @@ Replace binary collision with distance-based separation enforcement.
 
 ---
 
-## Priority 3: Expanded Command Set (Future)
+## Priority 4: Expanded Command Set (Future)
 
 **Status: Not Started**
 
@@ -137,7 +194,7 @@ Richer ATC commands closer to real phraseology. Note: `T`, `PB`, `TX`, `HS`, `CR
 
 ---
 
-## Priority 4: Aircraft Types (Future)
+## Priority 5: Aircraft Types (Future)
 
 **Status: Not Started**
 
@@ -152,7 +209,7 @@ Different aircraft categories with gameplay-affecting differences.
 
 ---
 
-## Priority 5: Pilot Patience / Pressure System (Future)
+## Priority 6: Pilot Patience / Pressure System (Future)
 
 **Status: Not Started**
 
@@ -167,7 +224,7 @@ Aircraft request instructions and expect timely responses.
 
 ---
 
-## Priority 6: Scenarios / Stages (Future)
+## Priority 7: Scenarios / Stages (Future)
 
 **Status: Not Started**
 
@@ -196,6 +253,15 @@ Structured challenges beyond infinite sandbox mode.
 - [x] Configurable difficulty (Easy/Normal/Hard)
 - [x] Plane trails
 - [x] ICAO / Short callsign styles
+- [x] Radio comms window with phraseology
+- [x] Command tree (interactive click/keyboard command menu)
+- [x] Ground aircraft states (Taxiing, AtGate, Pushback, HoldShort, OnRunway, Departing)
+- [x] Ground commands (T, PB, TX, HS, CR, GATE, GA)
+- [x] Taxiway network with pathfinding (all 3 maps)
+- [x] Taxiway/gate/hold-short rendering on radar
+- [x] Ground taxi movement along node paths
+- [x] Departures (gate spawn, pushback, taxi, takeoff roll, climb out)
+- [x] Arrival-to-gate flow (land → GATE → taxi → arrive)
 
 ---
 

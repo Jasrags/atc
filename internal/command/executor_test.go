@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Jasrags/atc/internal/aircraft"
+	"github.com/Jasrags/atc/internal/config"
 )
 
 func makePlanes() map[string]aircraft.Aircraft {
@@ -18,7 +19,7 @@ func TestExecuteHeading(t *testing.T) {
 	h := 270
 	cmd := Command{Callsign: "AA123", Heading: &h}
 
-	newPlanes, changes, err := Execute(cmd, planes)
+	newPlanes, changes, err := Execute(cmd, planes, config.RoleCombined)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -39,7 +40,7 @@ func TestExecuteAltitude(t *testing.T) {
 	a := 3
 	cmd := Command{Callsign: "AA123", Altitude: &a}
 
-	newPlanes, _, err := Execute(cmd, planes)
+	newPlanes, _, err := Execute(cmd, planes, config.RoleCombined)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,7 +54,7 @@ func TestExecuteSpeed(t *testing.T) {
 	s := 5
 	cmd := Command{Callsign: "AA123", Speed: &s}
 
-	newPlanes, _, err := Execute(cmd, planes)
+	newPlanes, _, err := Execute(cmd, planes, config.RoleCombined)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -66,7 +67,7 @@ func TestExecuteClearToLand(t *testing.T) {
 	planes := makePlanes()
 	cmd := Command{Callsign: "AA123", ClearToLand: true}
 
-	newPlanes, _, err := Execute(cmd, planes)
+	newPlanes, _, err := Execute(cmd, planes, config.RoleCombined)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -79,7 +80,7 @@ func TestExecuteUnknownCallsign(t *testing.T) {
 	planes := makePlanes()
 	cmd := Command{Callsign: "XX999", ClearToLand: true}
 
-	_, _, err := Execute(cmd, planes)
+	_, _, err := Execute(cmd, planes, config.RoleCombined)
 	if err == nil {
 		t.Error("expected error for unknown callsign")
 	}
@@ -94,7 +95,7 @@ func TestExecuteCrashedAircraft(t *testing.T) {
 	h := 90
 	cmd := Command{Callsign: "AA123", Heading: &h}
 
-	_, _, err := Execute(cmd, planes)
+	_, _, err := Execute(cmd, planes, config.RoleCombined)
 	if err == nil {
 		t.Error("expected error for crashed aircraft")
 	}
@@ -108,7 +109,7 @@ func TestExecuteAlreadyCleared(t *testing.T) {
 
 	cmd := Command{Callsign: "AA123", ClearToLand: true}
 
-	_, _, err := Execute(cmd, planes)
+	_, _, err := Execute(cmd, planes, config.RoleCombined)
 	if err == nil {
 		t.Error("expected error for already cleared aircraft")
 	}
@@ -121,7 +122,7 @@ func TestExecuteGoAround(t *testing.T) {
 	planes["AA123"] = ac
 
 	cmd := Command{Callsign: "AA123", GoAround: true}
-	newPlanes, changes, err := Execute(cmd, planes)
+	newPlanes, changes, err := Execute(cmd, planes, config.RoleCombined)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -136,7 +137,7 @@ func TestExecuteGoAround(t *testing.T) {
 func TestExecuteGoAroundNotLanding(t *testing.T) {
 	planes := makePlanes()
 	cmd := Command{Callsign: "AA123", GoAround: true}
-	_, _, err := Execute(cmd, planes)
+	_, _, err := Execute(cmd, planes, config.RoleCombined)
 	if err == nil {
 		t.Error("expected error for go around on non-landing aircraft")
 	}
@@ -149,7 +150,7 @@ func TestExecutePushback(t *testing.T) {
 	planes["AA123"] = ac
 
 	cmd := Command{Callsign: "AA123", PushbackApproved: true, ExpectRunway: "27"}
-	newPlanes, changes, err := Execute(cmd, planes)
+	newPlanes, changes, err := Execute(cmd, planes, config.RoleCombined)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -167,7 +168,7 @@ func TestExecutePushback(t *testing.T) {
 func TestExecutePushbackNotAtGate(t *testing.T) {
 	planes := makePlanes()
 	cmd := Command{Callsign: "AA123", PushbackApproved: true}
-	_, _, err := Execute(cmd, planes)
+	_, _, err := Execute(cmd, planes, config.RoleCombined)
 	if err == nil {
 		t.Error("expected error for pushback on airborne aircraft")
 	}
@@ -180,7 +181,7 @@ func TestExecuteTakeoff(t *testing.T) {
 	planes["AA123"] = ac
 
 	cmd := Command{Callsign: "AA123", Takeoff: true}
-	newPlanes, changes, err := Execute(cmd, planes)
+	newPlanes, changes, err := Execute(cmd, planes, config.RoleCombined)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -195,7 +196,7 @@ func TestExecuteTakeoff(t *testing.T) {
 func TestExecuteTakeoffNotInPosition(t *testing.T) {
 	planes := makePlanes()
 	cmd := Command{Callsign: "AA123", Takeoff: true}
-	_, _, err := Execute(cmd, planes)
+	_, _, err := Execute(cmd, planes, config.RoleCombined)
 	if err == nil {
 		t.Error("expected error for takeoff on airborne aircraft")
 	}
@@ -208,7 +209,7 @@ func TestExecuteTaxiRoute(t *testing.T) {
 	planes["AA123"] = ac
 
 	cmd := Command{Callsign: "AA123", TaxiRoute: []string{"A", "B"}}
-	newPlanes, changes, err := Execute(cmd, planes)
+	newPlanes, changes, err := Execute(cmd, planes, config.RoleCombined)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -230,7 +231,7 @@ func TestExecuteHoldShort(t *testing.T) {
 	planes["AA123"] = ac
 
 	cmd := Command{Callsign: "AA123", HoldShort: "27"}
-	newPlanes, _, err := Execute(cmd, planes)
+	newPlanes, _, err := Execute(cmd, planes, config.RoleCombined)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -246,7 +247,7 @@ func TestExecuteCrossRunway(t *testing.T) {
 	planes["AA123"] = ac
 
 	cmd := Command{Callsign: "AA123", CrossRunway: "27"}
-	newPlanes, _, err := Execute(cmd, planes)
+	newPlanes, _, err := Execute(cmd, planes, config.RoleCombined)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -262,7 +263,7 @@ func TestExecuteAssignGate(t *testing.T) {
 	planes["AA123"] = ac
 
 	cmd := Command{Callsign: "AA123", AssignGate: "G3"}
-	newPlanes, _, err := Execute(cmd, planes)
+	newPlanes, _, err := Execute(cmd, planes, config.RoleCombined)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -282,7 +283,7 @@ func TestExecuteAirborneOnGround(t *testing.T) {
 
 	h := 270
 	cmd := Command{Callsign: "AA123", Heading: &h}
-	_, _, err := Execute(cmd, planes)
+	_, _, err := Execute(cmd, planes, config.RoleCombined)
 	if err == nil {
 		t.Error("expected error for heading command on ground aircraft")
 	}
@@ -293,7 +294,7 @@ func TestExecuteMultiCommand(t *testing.T) {
 	h, a, s := 180, 5, 4
 	cmd := Command{Callsign: "AA123", Heading: &h, Altitude: &a, Speed: &s}
 
-	newPlanes, changes, err := Execute(cmd, planes)
+	newPlanes, changes, err := Execute(cmd, planes, config.RoleCombined)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -309,5 +310,44 @@ func TestExecuteMultiCommand(t *testing.T) {
 	}
 	if len(changes) != 3 {
 		t.Errorf("expected 3 changes, got %d", len(changes))
+	}
+}
+
+func TestTRACONRejectsGroundCommands(t *testing.T) {
+	planes := makePlanes()
+	ac := planes["AA123"]
+	ac.State = aircraft.AtGate
+	planes["AA123"] = ac
+
+	tests := []struct {
+		name string
+		cmd  Command
+	}{
+		{"pushback", Command{Callsign: "AA123", PushbackApproved: true}},
+		{"taxi", Command{Callsign: "AA123", TaxiRoute: []string{"A"}}},
+		{"hold short", Command{Callsign: "AA123", HoldShort: "27"}},
+		{"cross runway", Command{Callsign: "AA123", CrossRunway: "27"}},
+		{"gate", Command{Callsign: "AA123", AssignGate: "G1"}},
+		{"takeoff", Command{Callsign: "AA123", Takeoff: true}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := Execute(tt.cmd, planes, config.RoleTRACON)
+			if err == nil {
+				t.Errorf("expected TRACON to reject %s command", tt.name)
+			}
+		})
+	}
+}
+
+func TestTRACONAllowsAirborneCommands(t *testing.T) {
+	planes := makePlanes()
+	h := 270
+	cmd := Command{Callsign: "AA123", Heading: &h}
+
+	_, _, err := Execute(cmd, planes, config.RoleTRACON)
+	if err != nil {
+		t.Errorf("TRACON should allow heading command: %v", err)
 	}
 }

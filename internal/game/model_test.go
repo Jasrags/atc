@@ -19,7 +19,9 @@ func TestMain(m *testing.M) {
 func newPlayingModel() Model {
 	m := NewModel()
 	m.width, m.height = 100, 50
-	m.gameConfig = config.DefaultConfig()
+	cfg := config.DefaultConfig()
+	cfg.Role = config.RoleCombined // tests use Combined for explicit control
+	m.gameConfig = cfg
 	started, _ := m.startGame()
 	return started
 }

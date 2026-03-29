@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Jasrags/atc/internal/aircraft"
+	"github.com/Jasrags/atc/internal/config"
 	zone "github.com/lrstanley/bubblezone"
 )
 
@@ -23,7 +24,7 @@ func TestRenderEmpty(t *testing.T) {
 }
 
 func TestRenderCallsignPhase(t *testing.T) {
-	tree := Resolve("AA123 ", aircraft.Approaching)
+	tree := Resolve("AA123 ", aircraft.Approaching, config.RoleCombined)
 	result := Render(tree)
 	if !strings.Contains(result, "Commands") {
 		t.Error("expected 'Commands' label in callsign phase")
@@ -34,7 +35,7 @@ func TestRenderCallsignPhase(t *testing.T) {
 }
 
 func TestRenderValuePhase(t *testing.T) {
-	tree := Resolve("AA123 H", aircraft.Approaching)
+	tree := Resolve("AA123 H", aircraft.Approaching, config.RoleCombined)
 	result := Render(tree)
 	if !strings.Contains(result, "Values") {
 		t.Error("expected 'Values' label in value phase")
@@ -45,7 +46,7 @@ func TestRenderValuePhase(t *testing.T) {
 }
 
 func TestRenderChainPhase(t *testing.T) {
-	tree := Resolve("AA123 H270 ", aircraft.Approaching)
+	tree := Resolve("AA123 H270 ", aircraft.Approaching, config.RoleCombined)
 	result := Render(tree)
 	if !strings.Contains(result, "Add") {
 		t.Error("expected 'Add' label in chain phase")
@@ -56,7 +57,7 @@ func TestRenderChainPhase(t *testing.T) {
 }
 
 func TestRenderOptionsClickable(t *testing.T) {
-	tree := Resolve("AA123 ", aircraft.Approaching)
+	tree := Resolve("AA123 ", aircraft.Approaching, config.RoleCombined)
 	result := Render(tree)
 	// Each option should be wrapped in brackets
 	if !strings.Contains(result, "[") {
