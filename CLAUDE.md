@@ -30,8 +30,13 @@ See **[ROADMAP.md](ROADMAP.md)** for the feature priority list. Always reference
 main.go                          # Entry point — tea.NewProgram with alt-screen, --dev flag
 internal/
   game/
-    model.go                     # Top-level bubbletea Model (Init/Update/View, game loop)
+    model.go                     # Model struct, NewModel, Init/Update/View, startGame
+    tick.go                      # handleTick, tickPhysics, pure tick pipeline functions
+    playing.go                   # handlePlayingKey, processCommand, mouse, input helpers
+    menu.go                      # Menu, setup, help, paused, game over key handlers
+    helpers.go                   # Spawning, pathfinding, runway/gate/node lookups
     commands.go                  # tea.Cmd factories (tickCmd at 100ms / 10 FPS)
+    keys.go                      # Keybinding definitions (keyMap)
     dev.go                       # Developer mode: / command parser and handlers
   aircraft/
     aircraft.go                  # Aircraft struct, state machine, movement, trail tracking

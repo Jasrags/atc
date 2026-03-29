@@ -159,7 +159,7 @@ Phases 1-6 together constitute the Ground Operations MVP. Phases 1-2 (radio + co
 ### Known Follow-ups
 
 - [x] **Tick loop immutability refactor** — Refactored `handleTick` into a pipeline of pure transformation functions (`tickLanding`, `tickAutoGroundArrival`, `tickTaxiComplete`, `tickAutoGroundDeparture`, `tickPatience`) that each return a new `Aircraft` plus a `tickEffect` struct for side effects. Collision block also uses immutable `WithState`/`WithHeading` methods. No in-place mutation remains.
-- [ ] **Extract `model.go` into smaller files** — `model.go` is ~1000 lines (project limit is 800). Candidates to extract: `game/commands.go` (processCommand + resolution helpers), `game/automation.go` (TRACON auto-ground/departure), `game/patience.go` (patience tick logic). Do alongside or immediately after the immutability refactor.
+- [x] **Extract `model.go` into smaller files** — Split from 1151 → 315 lines. Extracted: `tick.go` (tick pipeline + physics), `playing.go` (command processing + input), `menu.go` (menu/setup/help/pause/gameover), `helpers.go` (spawning + pathfinding). All files under 400 lines.
 - [ ] Wire phraseology formatters (`FormatHeadingChange`, `FormatAltitudeChange`, etc.) into `CommandPhraseology` so radio log shows real ATC phrasing instead of abbreviated codes
 - [ ] `isCommand` in parser treats single-letter taxiway names `L`, `T`, `GA` as command tokens — will break `TX L T` routes if maps use those taxiway names. Guard or namespace taxiway names when defining maps.
 - [ ] Add integration tests for mouse click → command tree → input manipulation path in `game/model.go`. Bubblezone zone detection requires global manager init and synthetic mouse events.
