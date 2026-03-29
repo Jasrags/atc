@@ -78,6 +78,10 @@ Implementation:
 - [x] Split flight strip panels: arrivals / departures (Ebitengine sidebar)
 - [ ] Runway occupancy enforcement: only one operation per runway at a time
 - [ ] Runway incursion = game over
+- [ ] `LUAW` command — Line Up and Wait (pre-position on runway without takeoff clearance)
+- [ ] Runway exit assignment — Tower tells arrival which taxiway to exit onto
+- [ ] "Clear of runway" call — pilot confirms off active, unlocks next landing clearance
+- [ ] Arrival taxi-to-gate completion wired in Ebitengine game loop
 
 ### Future Roles
 
@@ -235,11 +239,11 @@ Richer ATC commands closer to real phraseology.
 
 ---
 
-## Priority 5: Aircraft Types & Performance (Future)
+## Priority 5: Aircraft Types, Wake Turbulence & Performance (Future)
 
 **Status: Not Started**
 
-Different aircraft categories with gameplay-affecting differences.
+Different aircraft categories with gameplay-affecting differences. See [`docs/atc-flight-cycle.md`](docs/atc-flight-cycle.md) for the full real-world flight cycle reference.
 
 **Wake turbulence categories:** Light (L), Medium (M), Heavy (H), Super (J)
 
@@ -248,6 +252,13 @@ Different aircraft categories with gameplay-affecting differences.
 - Medium: standard performance (B737, A320)
 - Heavy: slower turns, faster speed range (3-5), longer runway occupancy after landing
 - Super: A380/AN-225 — extreme wake spacing required
+
+**Wake turbulence spacing (hard constraints):**
+- Approach: mandatory spacing behind heavy/super on final (4-6nm for following light)
+- Departure: mandatory time interval before next departure (2 min behind heavy, 3 min behind super)
+- Wake category displayed prominently on flight strips
+- Violations flagged on radar + radio warning
+- This is the core sequencing constraint — a Heavy → Light → Light → Light sequence forces spacing that slows the entire flow
 
 **Flight strip display:**
 - Aircraft type code (B738, A321, C172, A388)
@@ -332,30 +343,84 @@ Flight strips should render differently per controller role — each position on
 
 ---
 
-## Priority 9: Handoff Mechanics (Future)
+## Priority 9: Handoff Mechanics & Departure Flow (Future)
 
 **Status: Not Started**
 
-Handoffs are the transitions between controller modes. In real ATC, a controller initiates a handoff, the receiver accepts, then the frequency change happens. A late or botched handoff creates downstream pressure.
+Handoffs are the transitions between controller modes. In real ATC, a controller initiates a handoff, the receiver accepts, then the frequency change happens. A late or botched handoff creates downstream pressure. See [`docs/atc-flight-cycle.md`](docs/atc-flight-cycle.md) for the full operational sequence.
 
 **Handoff modes (configurable per difficulty):**
 - Auto-handoff at boundary (Easy) — aircraft silently transitions
 - Manual initiation required (Normal) — player clicks to initiate, AI accepts
 - Handoff refusal if receiving sector is overloaded (Hard) — must reroute or hold
 
+**Handoff chain:**
+
+| From | To | Trigger |
+|---|---|---|
+| Clearance Delivery | Ground Control | Clearance read-back complete |
+| Ground Control | Tower | Aircraft at runway hold short |
+| Tower | TRACON Departure | Aircraft airborne, climbing |
+| TRACON Departure | Center (ARTCC) | Leaving terminal airspace |
+| Center (ARTCC) | TRACON Approach | ~30-50nm from destination |
+| TRACON Approach | Tower | ~5nm final, established on approach |
+| Tower | Ground Control | Aircraft clear of all runways |
+| Ground Control | Ramp | Aircraft at gate |
+
 **Departure releases:**
 - TRACON issues departure releases to Tower — Tower cannot send a departure without one during busy periods
 - Creates coordination tension between roles
 - In Combined mode, player manages both sides
 
+**Wheels-up time windows:**
+- Center issues timed departure slots — aircraft must be airborne within a narrow window
+- Miss the window → new slot must be negotiated → aircraft pushed to back of departure queue
+- Natural source of cascading delay — the sequence backs up behind a held aircraft
+- High-tension hold mechanic for Tower mode
+
 **Go-around cascade:**
 - Tower issues go-around → aircraft re-enters TRACON arrival sequence
-- Displaces other sequenced traffic — best stress test for TRACON mode
-- Radio comms show the cascade in real time
+- Displaces other sequenced traffic — the next 2-3 arrivals are affected
+- May push some aircraft below minimum fuel → priority handling required
+- Affects the departure release schedule (runway occupied longer)
+- Best stress test for TRACON mode — building this cascade correctly is key to making TRACON the most interesting mode
 
 ---
 
-## Priority 10: ATIS & Weather (Future)
+## Priority 10: Ground Servicing & Turnaround (Future)
+
+**Status: Not Started**
+
+Model the gate-side operations that constrain departure readiness. See [`docs/atc-flight-cycle.md`](docs/atc-flight-cycle.md) for the full real-world ground servicing sequence.
+
+**Parallel servicing countdown:**
+- Fueling, catering, lavatory, water, cargo, cabin cleaning, GPU — all run in parallel
+- Each service has its own completion time; fueling is typically the long pole
+- Aircraft cannot push back until ALL services are complete
+- Modeled as parallel countdown bars on the flight strip before pushback becomes available
+- Adds realistic pressure without requiring the player to manage each service directly
+
+**Turnaround cycle:**
+- Arrival at gate feeds directly into the next departure cycle for the same aircraft
+- Turnaround time: 45-60 min narrowbody, 90+ min widebody
+- Gate conflict: arriving aircraft's gate occupied by a late-departing aircraft
+- Short turns at hub airports are a high-pressure operational scenario
+
+**Clearance Delivery role (future game mode):**
+- Player issues IFR clearances before pushback: route (SID), initial altitude, squawk code, departure frequency
+- Pilot reads back clearance — controller must verify accuracy
+- Incorrect read-back must be corrected before approving
+- Slot time management at busy airports
+
+**SID/STAR procedures:**
+- Published departure routes (SIDs) with altitude/speed restrictions at named fixes
+- Published arrival routes (STARs) that channel arrivals into the terminal area
+- Multiple STARs feed from different directions into common feeder fixes
+- Controller may vector off the published procedure for traffic deconfliction
+
+---
+
+## Priority 11: ATIS & Weather (Future)
 
 **Status: Not Started**
 
@@ -382,12 +447,20 @@ Automatic Terminal Information Service provides current active runway, weather, 
 
 ## Design Reference
 
-See [`docs/atc-flight-strips.md`](docs/atc-flight-strips.md) for the full design document covering:
+See [`docs/atc-flight-strips.md`](docs/atc-flight-strips.md) for the flight strip design document covering:
 - Facility overview and flight lifecycle
 - Controller mode details (Clearance, Ground, Tower, TRACON, Center)
 - Flight strip field specifications per mode
 - Gameplay notes: strips as state machines, handoff mechanics, departure releases, wake turbulence, ATIS, go-arounds
-- References: FAA Order 7110.65, AIM Chapter 4, FAA AC 90-23G
+
+See [`docs/atc-flight-cycle.md`](docs/atc-flight-cycle.md) for the complete aircraft flight cycle covering:
+- Full departure sequence: clearance → ground servicing → pushback → taxi → LUAW → takeoff → climb → handoff
+- Full arrival sequence: descent → STAR → sequencing → vectors to final → cleared to land → rollout → taxi to gate
+- Handoff chain between all ATC facilities
+- Ground servicing detail (fueling, catering, cargo, cleaning)
+- Gameplay design notes: parallel servicing timers, wheels-up time windows, go-around cascades, turnaround cycles, wake turbulence as sequencing constraint
+
+References: FAA Order 7110.65, AIM Chapter 4, FAA AC 90-23G, ICAO Doc 4444
 
 ---
 
@@ -421,7 +494,7 @@ See [`docs/atc-flight-strips.md`](docs/atc-flight-strips.md) for the full design
 - [x] Controller role system (TRACON, Tower, Combined)
 - [x] Tower mode: final approach spawning, auto-handoff, command filtering
 - [x] Separation rules (3-cell lateral, 1-alt vertical, penalty, near-miss tracking)
-- [x] Expanded commands: D (direct to fix), TL/TR (forced turn), EX (expedite), L <runway>
+- [x] Expanded commands: D (direct), HLD (hold at fix), TL/TR (forced turn), EX (expedite), L <runway>
 - [x] Pilot patience system (30s timer, nag escalation, visual indicators)
 - [x] Time freeze (p key) and speed control ([ ] keys, 1x-12x)
 
