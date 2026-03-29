@@ -114,18 +114,27 @@ The game logic is cleanly separated from the presentation layer. **~70% of the c
 
 ### Phase 6: Visual Polish
 
-**Goal**: The game looks and feels like a radar scope, not an ASCII art project.
+**Goal**: The game looks and feels like a real radar scope, not an ASCII art project.
 
-- [ ] Radar scope aesthetic: dark green/black background, bright green blips (classic ATC scope feel)
-- [ ] Runway rendered as thick rectangle with threshold markings and runway numbers
-- [ ] Taxiways rendered as thinner lines with taxiway letter labels at intersections
-- [ ] Gates rendered as small rectangles with gate ID labels
-- [ ] Aircraft data blocks: leader line from symbol to data tag (callsign + alt + speed)
+Already done (from Phase 1-5):
+- [x] Radar scope aesthetic: dark green/black background, bright green blips
+- [x] Runway rendered as thick rectangle with threshold markings and runway numbers
+- [x] Taxiways rendered as thinner lines with taxiway letter labels at intersections
+- [x] Gates rendered as small rectangles with gate ID labels
+- [x] Aircraft data blocks: leader line from symbol to data tag (callsign + alt + speed)
+- [x] Hold-short bars rendered as dashed lines across taxiway
+
+Remaining:
 - [ ] Smooth aircraft position interpolation (sub-tick rendering for fluid movement)
 - [ ] Blinking effects: separation warnings, patience urgency, cleared-to-land
-- [ ] Hold-short bars rendered as dashed lines across taxiway
 - [ ] Compass rose or heading scale around radar border
 - [ ] Minimap (when zoomed in) showing full radar with current viewport rectangle
+- [ ] FAA airport diagram style Tower view:
+  - [ ] Runway-taxiway visual connectivity (taxiway C/D meet runway edge, not floating)
+  - [ ] Proportional taxiway widths (wider near intersections)
+  - [ ] Terminal building outlines (dark gray polygons adjacent to gates)
+  - [ ] Runway markings: centerline dashes, threshold bars, numbers rendered inside runway surface
+  - [ ] Runway-entry connector paths drawn from taxiway nodes to runway rectangle edge
 
 ### Phase 7: Remove TUI & Cleanup
 
