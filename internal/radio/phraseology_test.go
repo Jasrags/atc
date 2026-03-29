@@ -103,8 +103,41 @@ func TestCommandPhraseology(t *testing.T) {
 	if msg.To != "AA123" {
 		t.Errorf("expected to=AA123, got %s", msg.To)
 	}
-	want := "AA123, HDG 270, ALT 3"
+	want := "AA123, fly heading 270, maintain 3,000"
 	if msg.Text != want {
 		t.Errorf("got %q, want %q", msg.Text, want)
+	}
+}
+
+func TestChangeToPhraseology(t *testing.T) {
+	tests := []struct {
+		change string
+		want   string
+	}{
+		{"HDG 270", "fly heading 270"},
+		{"ALT 3", "maintain 3,000"},
+		{"SPD 2", "adjust speed 2"},
+		{"TURN LEFT HDG 090", "turn left heading 090"},
+		{"TURN RIGHT HDG 270", "turn right heading 270"},
+		{"DIRECT MAFAN", "proceed direct MAFAN"},
+		{"EXPEDITE", "expedite altitude change"},
+		{"CLEARED TO LAND", "cleared to land"},
+		{"CLEARED TO LAND RWY 27", "cleared to land runway 27"},
+		{"GO AROUND", "go around, climb and maintain 3000"},
+		{"CLEARED FOR TAKEOFF", "cleared for takeoff"},
+		{"PUSHBACK APPROVED", "pushback approved"},
+		{"PUSHBACK APPROVED, EXPECT RWY 27", "pushback approved, expect runway 27"},
+		{"TAXI VIA A B C1", "taxi via A B C1"},
+		{"HOLD SHORT RWY 27", "hold short runway 27"},
+		{"CROSS RWY 27", "cross runway 27"},
+		{"TAXI TO GATE G1", "taxi to gate G1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.change, func(t *testing.T) {
+			got := changeToPhraseology(tt.change)
+			if got != tt.want {
+				t.Errorf("changeToPhraseology(%q) = %q, want %q", tt.change, got, tt.want)
+			}
+		})
 	}
 }

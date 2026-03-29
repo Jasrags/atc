@@ -52,8 +52,54 @@ func FormatCollision(callsign1, callsign2 string) string {
 }
 
 // CommandPhraseology converts parsed command changes into a single outbound ATC radio message.
-// changes is a list of change descriptions (e.g., "HDG 270", "ALT 3", "CLEARED TO LAND").
+// Each change code (e.g., "HDG 270", "ALT 3") is translated into proper ATC phraseology.
 func CommandPhraseology(elapsed time.Duration, callsign string, changes []string) Message {
-	text := fmt.Sprintf("%s, %s", callsign, strings.Join(changes, ", "))
+	phrases := make([]string, 0, len(changes))
+	for _, c := range changes {
+		phrases = append(phrases, changeToPhraseology(c))
+	}
+	text := fmt.Sprintf("%s, %s", callsign, strings.Join(phrases, ", "))
 	return ATCMessage(elapsed, callsign, text)
+}
+
+// changeToPhraseology maps a single executor change code to ATC phraseology.
+func changeToPhraseology(change string) string {
+	switch {
+	case strings.HasPrefix(change, "TURN LEFT HDG "):
+		return "turn left heading " + strings.TrimPrefix(change, "TURN LEFT HDG ")
+	case strings.HasPrefix(change, "TURN RIGHT HDG "):
+		return "turn right heading " + strings.TrimPrefix(change, "TURN RIGHT HDG ")
+	case strings.HasPrefix(change, "HDG "):
+		return "fly heading " + strings.TrimPrefix(change, "HDG ")
+	case strings.HasPrefix(change, "ALT "):
+		return "maintain " + strings.TrimPrefix(change, "ALT ") + ",000"
+	case strings.HasPrefix(change, "SPD "):
+		return "adjust speed " + strings.TrimPrefix(change, "SPD ")
+	case strings.HasPrefix(change, "DIRECT "):
+		return "proceed direct " + strings.TrimPrefix(change, "DIRECT ")
+	case change == "EXPEDITE":
+		return "expedite altitude change"
+	case strings.HasPrefix(change, "CLEARED TO LAND RWY "):
+		return "cleared to land runway " + strings.TrimPrefix(change, "CLEARED TO LAND RWY ")
+	case change == "CLEARED TO LAND":
+		return "cleared to land"
+	case change == "GO AROUND":
+		return "go around, climb and maintain 3000"
+	case change == "CLEARED FOR TAKEOFF":
+		return "cleared for takeoff"
+	case strings.HasPrefix(change, "PUSHBACK APPROVED, EXPECT RWY "):
+		return "pushback approved, expect runway " + strings.TrimPrefix(change, "PUSHBACK APPROVED, EXPECT RWY ")
+	case change == "PUSHBACK APPROVED":
+		return "pushback approved"
+	case strings.HasPrefix(change, "TAXI VIA "):
+		return "taxi via " + strings.TrimPrefix(change, "TAXI VIA ")
+	case strings.HasPrefix(change, "HOLD SHORT RWY "):
+		return "hold short runway " + strings.TrimPrefix(change, "HOLD SHORT RWY ")
+	case strings.HasPrefix(change, "CROSS RWY "):
+		return "cross runway " + strings.TrimPrefix(change, "CROSS RWY ")
+	case strings.HasPrefix(change, "TAXI TO GATE "):
+		return "taxi to gate " + strings.TrimPrefix(change, "TAXI TO GATE ")
+	default:
+		return strings.ToLower(change)
+	}
 }

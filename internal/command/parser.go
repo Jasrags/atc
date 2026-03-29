@@ -151,7 +151,7 @@ func Parse(input string) (Command, error) {
 		case "TX":
 			i++
 			// Consume all remaining tokens as taxiway route
-			for i < len(tokens) && !isCommand(tokens[i]) {
+			for i < len(tokens) {
 				cmd.TaxiRoute = append(cmd.TaxiRoute, strings.ToUpper(tokens[i]))
 				i++
 			}

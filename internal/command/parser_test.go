@@ -135,6 +135,30 @@ func TestParseGroundCommands(t *testing.T) {
 			},
 		},
 		{
+			"taxi route with command-like names",
+			"AA123 TX L T",
+			func(t *testing.T, cmd Command) {
+				if len(cmd.TaxiRoute) != 2 {
+					t.Fatalf("expected 2 taxiway segments, got %d", len(cmd.TaxiRoute))
+				}
+				if cmd.TaxiRoute[0] != "L" || cmd.TaxiRoute[1] != "T" {
+					t.Errorf("expected [L T], got %v", cmd.TaxiRoute)
+				}
+			},
+		},
+		{
+			"taxi route with GA taxiway name",
+			"AA123 TX A GA B",
+			func(t *testing.T, cmd Command) {
+				if len(cmd.TaxiRoute) != 3 {
+					t.Fatalf("expected 3 taxiway segments, got %d", len(cmd.TaxiRoute))
+				}
+				if cmd.TaxiRoute[1] != "GA" {
+					t.Errorf("expected GA as taxiway name, got %v", cmd.TaxiRoute)
+				}
+			},
+		},
+		{
 			"hold short",
 			"AA123 HS 27",
 			func(t *testing.T, cmd Command) {
