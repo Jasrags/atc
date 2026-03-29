@@ -10,12 +10,13 @@ import (
 	"github.com/Jasrags/atc/internal/gamemap"
 	"github.com/Jasrags/atc/internal/runway"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
 const (
 	defaultWidth  = 1280
 	defaultHeight = 720
-	gameTPS       = 10 // match the TUI tick rate: 10 updates per second
+	gameTPS       = 10
 )
 
 // Game implements ebiten.Game for the ATC radar display.
@@ -24,6 +25,7 @@ type Game struct {
 	gameConfig config.GameConfig
 	width      int
 	height     int
+	camera     Camera
 
 	// Aircraft state
 	aircraft       map[string]aircraft.Aircraft
@@ -32,8 +34,8 @@ type Game struct {
 	spawnDeparture bool
 
 	// Time
-	tickCount int           // total ticks since game start
-	elapsed   time.Duration // simulated elapsed time (tickCount * 100ms)
+	tickCount int
+	elapsed   time.Duration
 
 	// Violations
 	activeViolations map[string]bool
@@ -50,11 +52,21 @@ func NewGame(gm gamemap.Map, role config.Role) *Game {
 		runways[i] = runway.New(r.X, r.Y, r.Heading, r.Length)
 	}
 
+	// Initial camera depends on role.
+	var cam Camera
+	switch role {
+	case config.RoleTower:
+		cam = FitSurface(gm, defaultWidth, defaultHeight)
+	default:
+		cam = FitMap(gm, defaultWidth, defaultHeight)
+	}
+
 	return &Game{
 		gameMap:          gm,
 		gameConfig:       cfg,
 		width:            defaultWidth,
 		height:           defaultHeight,
+		camera:           cam,
 		aircraft:         make(map[string]aircraft.Aircraft),
 		spawner:          aircraft.NewSpawner(time.Now().UnixNano(), cfg),
 		runways:          runways,
@@ -66,6 +78,8 @@ func (g *Game) Update() error {
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return ebiten.Termination
 	}
+
+	g.updateCamera()
 
 	g.tickCount++
 	g.elapsed = time.Duration(g.tickCount) * (time.Second / gameTPS)
@@ -88,7 +102,68 @@ func (g *Game) Draw(screen *ebiten.Image) {
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	g.width = outsideWidth
 	g.height = outsideHeight
+	g.camera.screenW = outsideWidth
+	g.camera.screenH = outsideHeight
 	return outsideWidth, outsideHeight
+}
+
+// --- Camera input ---
+
+func (g *Game) updateCamera() {
+	// Scroll wheel zoom — centered on cursor position.
+	_, wy := ebiten.Wheel()
+	if wy != 0 {
+		cx, cy := ebiten.CursorPosition()
+		if wy > 0 {
+			g.camera.ZoomAt(float64(cx), float64(cy), zoomStep)
+		} else {
+			g.camera.ZoomAt(float64(cx), float64(cy), 1.0/zoomStep)
+		}
+	}
+
+	// Click-and-drag pan. Mutually exclusive: start OR drag OR end per frame.
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		cx, cy := ebiten.CursorPosition()
+		g.camera.StartDrag(cx, cy)
+	} else if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		cx, cy := ebiten.CursorPosition()
+		g.camera.UpdateDrag(cx, cy)
+	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
+		g.camera.EndDrag()
+	}
+
+	// Keyboard pan (arrow keys).
+	panDelta := panSpeed / g.camera.Zoom
+	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) {
+		g.camera.CenterX -= panDelta
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyArrowRight) {
+		g.camera.CenterX += panDelta
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
+		g.camera.CenterY -= panDelta
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyArrowDown) {
+		g.camera.CenterY += panDelta
+	}
+
+	// +/- zoom from keyboard.
+	if inpututil.IsKeyJustPressed(ebiten.KeyEqual) || inpututil.IsKeyJustPressed(ebiten.KeyNumpadAdd) {
+		g.camera.ZoomAt(float64(g.width)/2, float64(g.height)/2, zoomStep)
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyMinus) || inpututil.IsKeyJustPressed(ebiten.KeyNumpadSubtract) {
+		g.camera.ZoomAt(float64(g.width)/2, float64(g.height)/2, 1.0/zoomStep)
+	}
+
+	// Home resets to fit-all.
+	if inpututil.IsKeyJustPressed(ebiten.KeyHome) {
+		switch g.gameConfig.Role {
+		case config.RoleTower:
+			g.camera = FitSurface(g.gameMap, g.width, g.height)
+		default:
+			g.camera = FitMap(g.gameMap, g.width, g.height)
+		}
+	}
 }
 
 // --- Tick pipeline ---
@@ -166,9 +241,8 @@ func (g *Game) trySpawnDeparture() bool {
 		return false
 	}
 
-	// In TRACON mode, auto-pushback departures.
 	if g.gameConfig.Role == config.RoleTRACON {
-		ac.State = aircraft.Pushback
+		ac = ac.WithState(aircraft.Pushback)
 	}
 
 	g.aircraft[ac.Callsign] = ac
@@ -196,30 +270,25 @@ func (g *Game) tickPhysics() {
 			next = ac.Tick()
 		}
 
-		// Departing aircraft that leave airspace — remove.
 		if next.State == aircraft.Departing && next.IsOffScreen(g.gameMap.Width, g.gameMap.Height) {
 			continue
 		}
-		// Airborne aircraft that leave — remove.
 		if next.State.IsAirborne() && next.IsOffScreen(g.gameMap.Width, g.gameMap.Height) {
 			continue
 		}
 
-		// Landing check.
 		if next.State == aircraft.Landing {
 			for _, rw := range g.runways {
 				if rw.CanLand(next.GridX(), next.GridY(), next.Heading, next.Altitude) {
-					next.State = aircraft.Landed
+					next = next.WithState(aircraft.Landed)
 					break
 				}
 			}
 		}
 
-		// Landed aircraft — remove after landing (simplified: no ground routing yet).
 		if next.State == aircraft.Landed {
 			continue
 		}
-		// AtGate — arrival complete, remove.
 		if next.State == aircraft.AtGate {
 			continue
 		}
@@ -229,7 +298,6 @@ func (g *Game) tickPhysics() {
 
 	g.aircraft = newAircraft
 
-	// Separation violations.
 	violations := collision.CheckSeparation(g.aircraft)
 	currentPairs := make(map[string]bool)
 	for _, v := range violations {
@@ -253,7 +321,6 @@ func (g *Game) runwayHeading(name string) int {
 	return 0
 }
 
-// sortedAircraft returns aircraft sorted by callsign for consistent rendering order.
 func (g *Game) sortedAircraft() []aircraft.Aircraft {
 	planes := make([]aircraft.Aircraft, 0, len(g.aircraft))
 	for _, ac := range g.aircraft {

@@ -26,7 +26,7 @@ func (g *Game) drawTRACON(screen *ebiten.Image) {
 func (g *Game) drawTraconGrid(screen *ebiten.Image) {
 	for y := 0; y < g.gameMap.Height; y += 10 {
 		for x := 0; x < g.gameMap.Width; x += 10 {
-			sx, sy := worldToScreen(float64(x), float64(y))
+			sx, sy := g.camera.WorldToScreen(float64(x), float64(y))
 			vector.DrawFilledRect(screen, float32(sx), float32(sy), 1, 1, traconGrid, false)
 		}
 	}
@@ -36,10 +36,10 @@ func (g *Game) drawTraconGrid(screen *ebiten.Image) {
 
 func (g *Game) drawTraconRangeRings(screen *ebiten.Image) {
 	rw := g.gameMap.PrimaryRunway()
-	cx, cy := worldToScreen(float64(rw.X), float64(rw.Y))
+	cx, cy := g.camera.WorldToScreen(float64(rw.X), float64(rw.Y))
 
 	for _, radius := range []float64{10, 20, 30, 40} {
-		r := float32(radius * cellSize)
+		r := float32(g.camera.ScaledSize(radius))
 		drawCircle(screen, float32(cx), float32(cy), r, traconRangeRing)
 	}
 }
@@ -48,7 +48,7 @@ func (g *Game) drawTraconRangeRings(screen *ebiten.Image) {
 
 func (g *Game) drawTraconFixes(screen *ebiten.Image) {
 	for _, fix := range g.gameMap.Fixes {
-		sx, sy := worldToScreen(float64(fix.X), float64(fix.Y))
+		sx, sy := g.camera.WorldToScreen(float64(fix.X), float64(fix.Y))
 
 		switch fix.Type {
 		case gamemap.FixWaypoint:
@@ -89,30 +89,33 @@ func (g *Game) drawTraconRunway(screen *ebiten.Image, rw gamemap.Runway) {
 	x2 := float64(rw.X) + halfLen*dx
 	y2 := float64(rw.Y) + halfLen*dy
 
-	sx1, sy1 := worldToScreen(x1, y1)
-	sx2, sy2 := worldToScreen(x2, y2)
+	sx1, sy1 := g.camera.WorldToScreen(x1, y1)
+	sx2, sy2 := g.camera.WorldToScreen(x2, y2)
 
 	// Runway centerline.
-	vector.StrokeLine(screen, float32(sx1), float32(sy1), float32(sx2), float32(sy2), 3, traconRunway, false)
+	rwyWidth := float32(3 * g.camera.Zoom)
+	if rwyWidth < 1 {
+		rwyWidth = 1
+	}
+	vector.StrokeLine(screen, float32(sx1), float32(sy1), float32(sx2), float32(sy2), rwyWidth, traconRunway, false)
 
-	// Extended approach course — dashed.
-	extLen := float64(25) * cellSize
+	// Extended approach course — dashed (extend 25 cells in world space).
+	ext1X, ext1Y := g.camera.WorldToScreen(x2+dx*25, y2+dy*25)
+	ext2X, ext2Y := g.camera.WorldToScreen(x1-dx*25, y1-dy*25)
 	drawDashedLine(screen,
-		float32(sx2), float32(sy2),
-		float32(sx2+dx*extLen), float32(sy2-dy*extLen),
+		float32(sx2), float32(sy2), float32(ext1X), float32(ext1Y),
 		6, 4, 1, traconApproach)
 	drawDashedLine(screen,
-		float32(sx1), float32(sy1),
-		float32(sx1-dx*extLen), float32(sy1+dy*extLen),
+		float32(sx1), float32(sy1), float32(ext2X), float32(ext2Y),
 		6, 4, 1, traconApproach)
 
-	// Runway numbers.
+	// Runway numbers (fixed screen-space offset from runway ends).
 	numApproach := gamemap.RunwayNumber(rw.Heading)
 	numOpposite := gamemap.RunwayNumber(rw.OppositeHeading())
 
-	drawLabel(screen, sx2+dx*cellSize*2, sy2-dy*cellSize*2-4,
+	drawLabel(screen, sx2+dx*16, sy2-dy*16-4,
 		fmt.Sprintf("%d", numApproach), 9, traconRunwayNum)
-	drawLabel(screen, sx1-dx*cellSize*2-14, sy1+dy*cellSize*2-4,
+	drawLabel(screen, sx1-dx*16-14, sy1+dy*16-4,
 		fmt.Sprintf("%d", numOpposite), 9, traconRunwayNum)
 }
 
@@ -125,29 +128,39 @@ func (g *Game) drawTraconAircraft(screen *ebiten.Image) {
 			continue
 		}
 
-		sx, sy := worldToScreen(ac.X, ac.Y)
+		sx, sy := g.camera.WorldToScreen(ac.X, ac.Y)
 
 		// History trail — fading dots from oldest (dimmest) to newest.
+		trailR := float32(1.5 * g.camera.Zoom)
+		if trailR < 1 {
+			trailR = 1
+		}
 		for i, pos := range ac.Trail {
-			tx, ty := worldToScreen(float64(pos[0]), float64(pos[1]))
-			// Fade: older dots are dimmer. Index 0 = oldest.
+			tx, ty := g.camera.WorldToScreen(float64(pos[0]), float64(pos[1]))
 			alpha := float32(0.15) + float32(i)*float32(0.15)
 			if alpha > 0.8 {
 				alpha = 0.8
 			}
 			c := traconTrail
 			c.A = uint8(float32(255) * alpha)
-			vector.DrawFilledCircle(screen, float32(tx), float32(ty), 1.5, c, false)
+			vector.DrawFilledCircle(screen, float32(tx), float32(ty), trailR, c, false)
 		}
 
-		// Target blip.
+		// Target blip — scales with zoom.
+		blipR := float32(3.5 * g.camera.Zoom)
+		if blipR < 2 {
+			blipR = 2
+		}
+		if blipR > 8 {
+			blipR = 8
+		}
 		targetColor := traconTarget
-		if g.activeViolations[ac.Callsign+":"] || isViolating(ac.Callsign, g.activeViolations) {
+		if isViolating(ac.Callsign, g.activeViolations) {
 			targetColor = traconConflict
 		}
-		vector.DrawFilledCircle(screen, float32(sx), float32(sy), 3.5, targetColor, false)
+		vector.DrawFilledCircle(screen, float32(sx), float32(sy), blipR, targetColor, false)
 
-		// Leader line — offset to upper-right by default.
+		// Leader line — fixed screen-space length.
 		leaderLen := float64(25)
 		lx := sx + leaderLen
 		ly := sy - leaderLen

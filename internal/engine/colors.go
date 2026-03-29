@@ -146,8 +146,3 @@ func drawChevron(screen *ebiten.Image, cx, cy float32, heading int, size float32
 	vector.StrokeLine(screen, rx, ry, lx, ly, 1.5, c, false)
 	vector.StrokeLine(screen, lx, ly, tx, ty, 1.5, c, false)
 }
-
-// worldToScreen converts game grid coordinates to screen pixel coordinates.
-func worldToScreen(x, y float64) (float64, float64) {
-	return x * cellSize, y * cellSize
-}

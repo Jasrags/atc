@@ -40,13 +40,13 @@ func (g *Game) drawTowerRunway(screen *ebiten.Image, rw gamemap.Runway) {
 	x2 := float64(rw.X) + halfLen*dx
 	y2 := float64(rw.Y) + halfLen*dy
 
-	sx1, sy1 := worldToScreen(x1, y1)
-	sx2, sy2 := worldToScreen(x2, y2)
+	sx1, sy1 := g.camera.WorldToScreen(x1, y1)
+	sx2, sy2 := g.camera.WorldToScreen(x2, y2)
 
-	// Perpendicular direction for width.
+	// Perpendicular direction for width — scales with zoom.
 	perpX := dy
 	perpY := dx
-	runwayWidth := float64(cellSize) * 1.8
+	runwayWidth := g.camera.ScaledSize(1.8)
 
 	// Four corners of the runway rectangle.
 	hw := runwayWidth / 2
@@ -70,7 +70,7 @@ func (g *Game) drawTowerRunway(screen *ebiten.Image, rw gamemap.Runway) {
 		{DstX: c4x, DstY: c4y, ColorR: r, ColorG: gc, ColorB: b, ColorA: 1},
 	}
 	indices := []uint16{0, 1, 2, 0, 2, 3}
-	screen.DrawTriangles(vertices, indices, whitePixel(), &ebiten.DrawTrianglesOptions{})
+	screen.DrawTriangles(vertices, indices, whitePixelImg, &ebiten.DrawTrianglesOptions{})
 
 	// Runway outline.
 	vector.StrokeLine(screen, c1x, c1y, c2x, c2y, 1, towerRunwayEdge, false)
@@ -92,9 +92,9 @@ func (g *Game) drawTowerRunway(screen *ebiten.Image, rw gamemap.Runway) {
 	numApproach := gamemap.RunwayNumber(rw.Heading)
 	numOpposite := gamemap.RunwayNumber(rw.OppositeHeading())
 
-	drawLabel(screen, sx2+dx*cellSize*2+2, sy2-dy*cellSize*2-5,
+	drawLabel(screen, sx2+dx*20, sy2-dy*20-5,
 		fmt.Sprintf("%d", numApproach), 11, towerRunwayNum)
-	drawLabel(screen, sx1-dx*cellSize*2-18, sy1+dy*cellSize*2-5,
+	drawLabel(screen, sx1-dx*20-18, sy1+dy*20-5,
 		fmt.Sprintf("%d", numOpposite), 11, towerRunwayNum)
 }
 
@@ -110,12 +110,16 @@ func (g *Game) drawTowerTaxiways(screen *ebiten.Image) {
 		if from == nil || to == nil {
 			continue
 		}
-		sx1, sy1 := worldToScreen(float64(from.X), float64(from.Y))
-		sx2, sy2 := worldToScreen(float64(to.X), float64(to.Y))
+		sx1, sy1 := g.camera.WorldToScreen(float64(from.X), float64(from.Y))
+		sx2, sy2 := g.camera.WorldToScreen(float64(to.X), float64(to.Y))
 
-		vector.StrokeLine(screen, float32(sx1), float32(sy1), float32(sx2), float32(sy2), 3, towerTaxiway, false)
-		vector.DrawFilledCircle(screen, float32(sx1), float32(sy1), 2, towerTaxiway, false)
-		vector.DrawFilledCircle(screen, float32(sx2), float32(sy2), 2, towerTaxiway, false)
+		tw := float32(g.camera.Zoom * 2)
+		if tw < 1 {
+			tw = 1
+		}
+		vector.StrokeLine(screen, float32(sx1), float32(sy1), float32(sx2), float32(sy2), tw, towerTaxiway, false)
+		vector.DrawFilledCircle(screen, float32(sx1), float32(sy1), tw*0.8, towerTaxiway, false)
+		vector.DrawFilledCircle(screen, float32(sx2), float32(sy2), tw*0.8, towerTaxiway, false)
 
 		if !labeled[edge.Taxiway] {
 			mx := (sx1 + sx2) / 2
@@ -134,9 +138,16 @@ func (g *Game) drawTowerGates(screen *ebiten.Image) {
 		if node == nil {
 			continue
 		}
-		sx, sy := worldToScreen(float64(node.X), float64(node.Y))
+		sx, sy := g.camera.WorldToScreen(float64(node.X), float64(node.Y))
 
-		gw, gh := float32(20), float32(12)
+		gw := float32(g.camera.ScaledSize(2.5))
+		gh := float32(g.camera.ScaledSize(1.5))
+		if gw < 10 {
+			gw = 10
+		}
+		if gh < 6 {
+			gh = 6
+		}
 		vector.DrawFilledRect(screen, float32(sx)-gw/2, float32(sy)-gh/2, gw, gh, towerGateFill, false)
 		vector.StrokeRect(screen, float32(sx)-gw/2, float32(sy)-gh/2, gw, gh, 1, towerGateEdge, false)
 
@@ -151,9 +162,12 @@ func (g *Game) drawTowerHoldShorts(screen *ebiten.Image) {
 		if node.Type != gamemap.NodeHoldShort {
 			continue
 		}
-		sx, sy := worldToScreen(float64(node.X), float64(node.Y))
+		sx, sy := g.camera.WorldToScreen(float64(node.X), float64(node.Y))
 
-		barHalf := float32(8)
+		barHalf := float32(g.camera.ScaledSize(1.0))
+		if barHalf < 4 {
+			barHalf = 4
+		}
 		drawDashedLine(screen,
 			float32(sx)-barHalf, float32(sy),
 			float32(sx)+barHalf, float32(sy),
@@ -172,7 +186,7 @@ func (g *Game) drawTowerAircraft(screen *ebiten.Image) {
 			continue
 		}
 
-		sx, sy := worldToScreen(ac.X, ac.Y)
+		sx, sy := g.camera.WorldToScreen(ac.X, ac.Y)
 
 		// Color: departures = cyan, arrivals/ground = green, conflict = red.
 		c := towerTarget
@@ -184,14 +198,24 @@ func (g *Game) drawTowerAircraft(screen *ebiten.Image) {
 			c = towerConflict
 		}
 
+		// Chevron/symbol size scales with zoom.
+		chevSize := float32(g.camera.Zoom * 4)
+		if chevSize < 3 {
+			chevSize = 3
+		}
+		if chevSize > 12 {
+			chevSize = 12
+		}
+
 		// Directional chevron for moving/positioned aircraft.
 		if ac.State == aircraft.Approaching || ac.State == aircraft.Landing ||
 			ac.State == aircraft.Departing || ac.State == aircraft.OnRunway ||
 			ac.State == aircraft.Taxiing {
-			drawChevron(screen, float32(sx), float32(sy), ac.Heading, 5, c)
+			drawChevron(screen, float32(sx), float32(sy), ac.Heading, chevSize, c)
 		} else {
 			// Static aircraft (gate, pushback, hold short) — filled square.
-			vector.DrawFilledRect(screen, float32(sx)-3, float32(sy)-3, 6, 6, c, false)
+			hs := chevSize * 0.6
+			vector.DrawFilledRect(screen, float32(sx)-hs, float32(sy)-hs, hs*2, hs*2, c, false)
 		}
 
 		// Short leader line + callsign tag.
@@ -258,10 +282,9 @@ func (g *Game) drawTowerApproachInset(screen *ebiten.Image) {
 	}
 }
 
-// --- Helper ---
-
-func whitePixel() *ebiten.Image {
+// whitePixelImg is a 1x1 white texture used for DrawTriangles — created once.
+var whitePixelImg = func() *ebiten.Image {
 	img := ebiten.NewImage(1, 1)
 	img.Fill(colorWhite)
 	return img
-}
+}()
