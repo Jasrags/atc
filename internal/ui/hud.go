@@ -10,11 +10,15 @@ import (
 )
 
 // RenderHUD builds the heads-up display with score, aircraft count, and elapsed time.
-func RenderHUD(score int, aircraftCount int, elapsed time.Duration, role string, nearMisses int) string {
+func RenderHUD(score int, aircraftCount int, elapsed time.Duration, role string, nearMisses int, devStatus string) string {
 	nmStr := fmt.Sprintf("%d", nearMisses)
+	label := "ATC"
+	if devStatus != "" {
+		label = devStatus
+	}
 	t := table.New().
 		Headers("", "ROLE", "SCORE", "AIRCRAFT", "NEAR MISS", "TIME").
-		Row("ATC", role, fmt.Sprintf("%d", score), fmt.Sprintf("%d", aircraftCount), nmStr, formatDuration(elapsed)).
+		Row(label, role, fmt.Sprintf("%d", score), fmt.Sprintf("%d", aircraftCount), nmStr, formatDuration(elapsed)).
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("63"))).
 		StyleFunc(func(row, col int) lipgloss.Style {

@@ -27,11 +27,12 @@ See **[ROADMAP.md](ROADMAP.md)** for the feature priority list. Always reference
 ## Project Structure
 
 ```
-main.go                          # Entry point — tea.NewProgram with alt-screen
+main.go                          # Entry point — tea.NewProgram with alt-screen, --dev flag
 internal/
   game/
     model.go                     # Top-level bubbletea Model (Init/Update/View, game loop)
     commands.go                  # tea.Cmd factories (tickCmd at 100ms / 10 FPS)
+    dev.go                       # Developer mode: / command parser and handlers
   aircraft/
     aircraft.go                  # Aircraft struct, state machine, movement, trail tracking
     departure.go                 # NewDeparture constructor, TakeoffTick (OnRunway → Departing)
@@ -72,6 +73,7 @@ internal/
 ```bash
 make build       # Build binary
 make run         # Build and run
+make dev         # Build and run with developer mode (/ commands)
 make watch       # Rebuild on .go file changes (requires entr)
 make test        # Run tests
 make test-race   # Run tests with -race
@@ -139,6 +141,22 @@ Settings are configured on the setup screen before each game and stored in `conf
   CR <runway>   Cleared to cross runway
   GATE <gate>   Taxi to gate
 ```
+
+## Developer Mode
+
+Launch with `make dev` or `./atc -dev` to enable `/` commands in the ATC prompt for testing without gameplay pressure.
+
+| Command | Effect |
+|---------|--------|
+| `/help` | List all dev commands |
+| `/spawn` | Spawn one arrival at random edge |
+| `/spawn dep` | Spawn one departure at random gate |
+| `/clear` | Remove all aircraft |
+| `/god` | Toggle god mode (collisions don't end game) |
+| `/pause` | Toggle automatic spawner on/off |
+| `/speed <1-5>` | Set game speed multiplier (physics runs N times per frame) |
+
+HUD shows `[DEV]` with active flags: `[DEV GOD NOSPAWN 3x]`. Single-char shortcuts (`p` for pause, `?` for help) only activate when the input field is empty — they never interfere with typing commands.
 
 ## Testing
 

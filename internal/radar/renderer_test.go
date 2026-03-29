@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Jasrags/atc/internal/aircraft"
+	"github.com/Jasrags/atc/internal/config"
 	"github.com/Jasrags/atc/internal/gamemap"
 	zone "github.com/lrstanley/bubblezone"
 )
@@ -66,7 +67,7 @@ func TestRenderWithAircraft(t *testing.T) {
 }
 
 func TestRenderFlightStripsEmpty(t *testing.T) {
-	result := RenderFlightStrips(nil)
+	result := RenderFlightStrips(nil, config.RoleCombined)
 	if !strings.Contains(result, "No aircraft") {
 		t.Error("expected 'No aircraft' for empty strips")
 	}
@@ -76,7 +77,7 @@ func TestRenderFlightStripsWithAircraft(t *testing.T) {
 	planes := []aircraft.Aircraft{
 		aircraft.New("UA456", 10, 10, 180, 8, 3),
 	}
-	result := RenderFlightStrips(planes)
+	result := RenderFlightStrips(planes, config.RoleCombined)
 
 	if !strings.Contains(result, "UA456") {
 		t.Error("expected callsign in flight strip")
@@ -95,7 +96,7 @@ func TestRenderFlightStripsShowsTargets(t *testing.T) {
 	ac.TargetAltitude = 3
 	planes := []aircraft.Aircraft{ac}
 
-	result := RenderFlightStrips(planes)
+	result := RenderFlightStrips(planes, config.RoleCombined)
 
 	if !strings.Contains(result, "H270") {
 		t.Error("expected target heading H270 in flight strip")
@@ -110,10 +111,42 @@ func TestRenderFlightStripsAltitudeArrow(t *testing.T) {
 	ac.TargetAltitude = 5 // descending
 	planes := []aircraft.Aircraft{ac}
 
-	result := RenderFlightStrips(planes)
+	result := RenderFlightStrips(planes, config.RoleCombined)
 
 	if !strings.Contains(result, "↓") {
 		t.Error("expected descend arrow in flight strip")
+	}
+}
+
+func TestRenderFlightStripsTRACONHidesGroundAircraft(t *testing.T) {
+	airborne := aircraft.New("AA1", 30, 15, 90, 10, 3)
+	taxiing := aircraft.New("UA2", 10, 5, 0, 0, 0)
+	taxiing.State = aircraft.Taxiing
+	pushback := aircraft.New("DL3", 20, 5, 0, 0, 0)
+	pushback.State = aircraft.Pushback
+
+	planes := []aircraft.Aircraft{airborne, taxiing, pushback}
+	result := RenderFlightStrips(planes, config.RoleTRACON)
+
+	if !strings.Contains(result, "AA1") {
+		t.Error("expected airborne aircraft in TRACON strips")
+	}
+	if strings.Contains(result, "UA2") {
+		t.Error("expected taxiing aircraft hidden in TRACON strips")
+	}
+	if strings.Contains(result, "DL3") {
+		t.Error("expected pushback aircraft hidden in TRACON strips")
+	}
+}
+
+func TestRenderFlightStripsCombinedShowsGroundAircraft(t *testing.T) {
+	taxiing := aircraft.New("UA2", 10, 5, 0, 0, 0)
+	taxiing.State = aircraft.Taxiing
+	planes := []aircraft.Aircraft{taxiing}
+	result := RenderFlightStrips(planes, config.RoleCombined)
+
+	if !strings.Contains(result, "UA2") {
+		t.Error("expected taxiing aircraft shown in Combined strips")
 	}
 }
 

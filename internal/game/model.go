@@ -95,10 +95,16 @@ type Model struct {
 	spawnDeparture     bool           // alternates between arrival and departure spawns
 	nearMisses         int            // total separation violations this game
 	activeViolations   map[string]bool // tracks pairs currently in violation (to warn once)
+
+	// Developer mode
+	devMode         bool // --dev flag enables / commands
+	godMode         bool // collisions logged but don't end game
+	spawnerPaused   bool // automatic spawning disabled
+	speedMultiplier int  // physics ticks per render frame (1 = normal)
 }
 
 // NewModel creates a new model starting at the main menu.
-func NewModel() Model {
+func NewModel(devMode bool) Model {
 	maps := gamemap.All()
 	if len(maps) == 0 {
 		panic("gamemap.All returned no maps")
@@ -108,15 +114,17 @@ func NewModel() Model {
 	h := help.New()
 	h.ShowAll = true
 	return Model{
-		screen:     screenMenu,
-		maps:       maps,
-		gameMap:    gm,
-		gameConfig: cfg,
-		aircraft:   make(map[string]aircraft.Aircraft),
-		runways:    buildRunways(gm),
-		radioLog:   radio.NewLog(),
-		keys:       newKeyMap(),
-		help:       h,
+		screen:          screenMenu,
+		maps:            maps,
+		gameMap:          gm,
+		gameConfig:       cfg,
+		aircraft:         make(map[string]aircraft.Aircraft),
+		runways:          buildRunways(gm),
+		radioLog:         radio.NewLog(),
+		keys:             newKeyMap(),
+		help:             h,
+		devMode:          devMode,
+		speedMultiplier:  1,
 		setupSelections: [setupSections]int{
 			0, // map: first
 			0, // role: TRACON
@@ -344,29 +352,39 @@ func (m Model) startGame() (Model, tea.Cmd) {
 // --- Playing ---
 
 func (m Model) handlePlayingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, m.keys.Back):
+	// Esc always works regardless of input state.
+	if key.Matches(msg, m.keys.Back) {
 		m.screen = screenMenu
 		m.menuSelected = 0
 		return m, m.stopwatch.Stop()
-
-	case key.Matches(msg, m.keys.Help):
-		m.screen = screenHelp
-		return m, nil
-
-	case key.Matches(msg, m.keys.Pause):
-		m.screen = screenPaused
-		return m, m.stopwatch.Stop()
 	}
 
+	// Submit always works — process the command if input is non-empty.
 	if key.Matches(msg, m.keys.Submit) {
 		input := strings.TrimSpace(m.input.Value())
 		if input != "" {
-			m = m.processCommand(input)
+			if strings.HasPrefix(input, "/") {
+				m = m.processDevCommand(strings.TrimPrefix(input, "/"))
+			} else {
+				m = m.processCommand(input)
+			}
 			m.input.Reset()
 			m.cmdTree = cmdtree.Tree{}
 		}
 		return m, nil
+	}
+
+	// Single-char shortcuts (p, ?) only activate when the input is empty.
+	// Otherwise they'd swallow letters the user is typing into the ATC prompt.
+	if m.input.Value() == "" {
+		switch {
+		case key.Matches(msg, m.keys.Help):
+			m.screen = screenHelp
+			return m, nil
+		case key.Matches(msg, m.keys.Pause):
+			m.screen = screenPaused
+			return m, m.stopwatch.Stop()
+		}
 	}
 
 	var cmd tea.Cmd
@@ -736,6 +754,46 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 
 	elapsed := m.stopwatch.Elapsed()
 
+	// Speed multiplier: run physics N times per render frame.
+	ticks := m.speedMultiplier
+	if ticks < 1 {
+		ticks = 1
+	}
+
+	for tick := 0; tick < ticks; tick++ {
+		m = m.tickPhysics(elapsed)
+		if m.screen == screenGameOver {
+			return m, nil
+		}
+	}
+
+	// Phase 5: spawning (once per frame regardless of speed)
+	if !m.spawnerPaused && m.spawner.ShouldSpawn(elapsed, len(m.aircraft)) {
+		countBefore := len(m.aircraft)
+		if m.spawnDeparture && len(m.gameMap.Gates) > 0 {
+			m = m.trySpawnDeparture(elapsed)
+		} else {
+			ac := m.spawner.Spawn(m.gameMap.Width, m.gameMap.Height)
+			if _, exists := m.aircraft[ac.Callsign]; !exists {
+				m.aircraft[ac.Callsign] = ac
+				m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
+					radio.FormatEnteringAirspace(ac.Callsign, ac.Heading, ac.Altitude)))
+			}
+		}
+		if len(m.aircraft) > countBefore {
+			m.spawnDeparture = !m.spawnDeparture
+		}
+	}
+
+	// Update flight strip viewport content
+	m.stripViewport.SetContent(radar.RenderFlightStrips(m.sortedAircraft(), m.gameConfig.Role))
+
+	return m, tickCmd()
+}
+
+// tickPhysics runs one cycle of aircraft movement, collision, separation, and
+// state transitions. Extracted so the speed multiplier can call it N times.
+func (m Model) tickPhysics(elapsed time.Duration) Model {
 	// Phase 1: advance physics (each Tick/GroundTick/TakeoffTick is already pure)
 	newAircraft := make(map[string]aircraft.Aircraft, len(m.aircraft))
 	for k, ac := range m.aircraft {
@@ -773,19 +831,23 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 	// Phase 2: collision detection (immutable — build new map with crashed state)
 	collisions := collision.Check(m.aircraft)
 	if len(collisions) > 0 {
-		crashed := make(map[string]aircraft.Aircraft, len(m.aircraft))
-		for k, ac := range m.aircraft {
-			crashed[k] = ac
-		}
 		for _, c := range collisions {
-			crashed[c.Callsign1] = crashed[c.Callsign1].WithState(aircraft.Crashed)
-			crashed[c.Callsign2] = crashed[c.Callsign2].WithState(aircraft.Crashed)
 			m = m.addRadio(radio.SystemMessage(elapsed,
 				radio.FormatCollision(c.Callsign1, c.Callsign2), radio.Emergency))
 		}
-		m.aircraft = crashed
-		m.screen = screenGameOver
-		return m, nil
+		if !m.godMode {
+			crashed := make(map[string]aircraft.Aircraft, len(m.aircraft))
+			for k, ac := range m.aircraft {
+				crashed[k] = ac
+			}
+			for _, c := range collisions {
+				crashed[c.Callsign1] = crashed[c.Callsign1].WithState(aircraft.Crashed)
+				crashed[c.Callsign2] = crashed[c.Callsign2].WithState(aircraft.Crashed)
+			}
+			m.aircraft = crashed
+			m.screen = screenGameOver
+			return m
+		}
 	}
 
 	// Phase 3: separation violations
@@ -845,28 +907,7 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 	}
 	m.aircraft = activeAircraft
 
-	// Phase 5: spawning
-	if m.spawner.ShouldSpawn(elapsed, len(m.aircraft)) {
-		countBefore := len(m.aircraft)
-		if m.spawnDeparture && len(m.gameMap.Gates) > 0 {
-			m = m.trySpawnDeparture(elapsed)
-		} else {
-			ac := m.spawner.Spawn(m.gameMap.Width, m.gameMap.Height)
-			if _, exists := m.aircraft[ac.Callsign]; !exists {
-				m.aircraft[ac.Callsign] = ac
-				m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
-					radio.FormatEnteringAirspace(ac.Callsign, ac.Heading, ac.Altitude)))
-			}
-		}
-		if len(m.aircraft) > countBefore {
-			m.spawnDeparture = !m.spawnDeparture
-		}
-	}
-
-	// Update flight strip viewport content
-	m.stripViewport.SetContent(radar.RenderFlightStrips(m.sortedAircraft()))
-
-	return m, tickCmd()
+	return m
 }
 
 // --- View ---
@@ -920,7 +961,7 @@ func (m Model) View() string {
 func (m Model) renderPlaying() string {
 	planes := m.sortedAircraft()
 
-	hud := ui.RenderHUD(m.score, len(planes), m.stopwatch.Elapsed(), m.gameConfig.Role.String(), m.nearMisses)
+	hud := ui.RenderHUD(m.score, len(planes), m.stopwatch.Elapsed(), m.gameConfig.Role.String(), m.nearMisses, m.DevStatus())
 	// Build set of callsigns currently in violation for radar highlighting
 	violating := make(map[string]bool)
 	for pair := range m.activeViolations {

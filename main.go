@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -10,9 +11,12 @@ import (
 )
 
 func main() {
+	devMode := flag.Bool("dev", false, "enable developer mode (/ commands)")
+	flag.Parse()
+
 	zone.NewGlobal()
 
-	m := game.NewModel()
+	m := game.NewModel(*devMode)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	if _, err := p.Run(); err != nil {

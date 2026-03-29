@@ -2,6 +2,7 @@ package game
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,7 +18,7 @@ func TestMain(m *testing.M) {
 }
 
 func newPlayingModel() Model {
-	m := NewModel()
+	m := NewModel(false)
 	m.width, m.height = 100, 50
 	cfg := config.DefaultConfig()
 	cfg.Role = config.RoleCombined // tests use Combined for explicit control
@@ -27,14 +28,14 @@ func newPlayingModel() Model {
 }
 
 func TestNewModelStartsAtMenu(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	if m.screen != screenMenu {
 		t.Errorf("expected screenMenu, got %d", m.screen)
 	}
 }
 
 func TestMenuNavigation(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.width, m.height = 100, 50
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyDown})
@@ -51,7 +52,7 @@ func TestMenuNavigation(t *testing.T) {
 }
 
 func TestMenuNewGameGoesToSetup(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.width, m.height = 100, 50
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
@@ -63,7 +64,7 @@ func TestMenuNewGameGoesToSetup(t *testing.T) {
 }
 
 func TestSetupTabCyclesFocus(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.width, m.height = 100, 50
 	m.menuScreen = menuSetup
 	m.setupFocus = 0
@@ -79,7 +80,7 @@ func TestSetupTabCyclesFocus(t *testing.T) {
 }
 
 func TestSetupShiftTabCyclesBack(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.menuScreen = menuSetup
 	m.setupFocus = 0
 
@@ -91,7 +92,7 @@ func TestSetupShiftTabCyclesBack(t *testing.T) {
 }
 
 func TestSetupUpDownChangesSelection(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.menuScreen = menuSetup
 	m.setupFocus = setupDiff // Difficulty: Easy/Normal/Hard
 	m.setupSelections[setupDiff] = 1 // Normal
@@ -119,7 +120,7 @@ func TestSetupUpDownChangesSelection(t *testing.T) {
 }
 
 func TestSetupStartsGame(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.width, m.height = 100, 50
 	m.menuScreen = menuSetup
 
@@ -135,7 +136,7 @@ func TestSetupStartsGame(t *testing.T) {
 }
 
 func TestSetupBuildsConfig(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.menuScreen = menuSetup
 	m.setupSelections[setupDiff] = 2      // Hard
 	m.setupSelections[setupCallsign] = 1  // Short
@@ -154,7 +155,7 @@ func TestSetupBuildsConfig(t *testing.T) {
 }
 
 func TestSetupEscGoesBack(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.menuScreen = menuSetup
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEscape})
@@ -166,7 +167,7 @@ func TestSetupEscGoesBack(t *testing.T) {
 }
 
 func TestMenuHelp(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.width, m.height = 100, 50
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
@@ -178,7 +179,7 @@ func TestMenuHelp(t *testing.T) {
 }
 
 func TestMenuQuit(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 
 	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if cmd == nil {
@@ -187,7 +188,7 @@ func TestMenuQuit(t *testing.T) {
 }
 
 func TestHelpReturnToMenu(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.screen = screenHelp
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEscape})
@@ -199,7 +200,7 @@ func TestHelpReturnToMenu(t *testing.T) {
 }
 
 func TestHelpReturnToPlaying(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.screen = screenHelp
 	m.started = true
 
@@ -236,6 +237,33 @@ func TestPlayingPause(t *testing.T) {
 	}
 }
 
+func TestPlayingPauseBlockedWhileTyping(t *testing.T) {
+	m := newPlayingModel()
+	m.input.SetValue("AA123 ")
+
+	res, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	model := res.(Model)
+
+	if model.screen != screenPlaying {
+		t.Error("pressing 'p' while typing should NOT pause")
+	}
+	if !strings.Contains(model.input.Value(), "p") {
+		t.Error("'p' should be forwarded to input when typing")
+	}
+}
+
+func TestPlayingHelpBlockedWhileTyping(t *testing.T) {
+	m := newPlayingModel()
+	m.input.SetValue("AA123 ")
+
+	res, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	model := res.(Model)
+
+	if model.screen != screenPlaying {
+		t.Error("pressing '?' while typing should NOT open help")
+	}
+}
+
 func TestPauseResume(t *testing.T) {
 	m := newPlayingModel()
 	m.screen = screenPaused
@@ -252,7 +280,7 @@ func TestPauseResume(t *testing.T) {
 }
 
 func TestPauseQuit(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.screen = screenPaused
 
 	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -262,7 +290,7 @@ func TestPauseQuit(t *testing.T) {
 }
 
 func TestPauseEscGoesToMenu(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.screen = screenPaused
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEscape})
@@ -370,7 +398,7 @@ func TestGameOverRestart(t *testing.T) {
 }
 
 func TestGameOverEscGoesToMenu(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.screen = screenGameOver
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEscape})
@@ -382,7 +410,7 @@ func TestGameOverEscGoesToMenu(t *testing.T) {
 }
 
 func TestViewMenuScreen(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.width, m.height = 100, 50
 
 	view := m.View()
@@ -392,7 +420,7 @@ func TestViewMenuScreen(t *testing.T) {
 }
 
 func TestViewSetupScreen(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.width, m.height = 100, 50
 	m.menuScreen = menuSetup
 
@@ -441,7 +469,7 @@ func TestProcessCommandUnknownCallsign(t *testing.T) {
 }
 
 func TestViewMinSize(t *testing.T) {
-	m := NewModel()
+	m := NewModel(false)
 	m.width, m.height = 30, 10
 
 	view := m.View()

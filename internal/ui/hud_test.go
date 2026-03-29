@@ -7,7 +7,7 @@ import (
 )
 
 func TestRenderHUD(t *testing.T) {
-	result := RenderHUD(5, 3, 90*time.Second, "TRACON", 2)
+	result := RenderHUD(5, 3, 90*time.Second, "TRACON", 2, "")
 
 	if !strings.Contains(result, "5") {
 		t.Error("expected score in HUD")

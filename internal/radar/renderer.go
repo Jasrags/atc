@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Jasrags/atc/internal/aircraft"
+	"github.com/Jasrags/atc/internal/config"
 	"github.com/Jasrags/atc/internal/gamemap"
 	"github.com/Jasrags/atc/internal/ui"
 	zone "github.com/lrstanley/bubblezone"
@@ -303,10 +304,10 @@ func renderGrid(grid [][]rune, width, height int) string {
 	return ui.RadarBorder.Render(sb.String())
 }
 
-// RenderFlightStrips builds the flight strip panel showing each aircraft's status.
-// Each strip shows: callsign, heading, altitude (with climb/descend arrow), speed, and state.
-// Format inspired by ATC-SIM progress strips.
-func RenderFlightStrips(planes []aircraft.Aircraft) string {
+// RenderFlightStrips renders the sidebar flight strip list.
+// In TRACON mode, automated ground aircraft are hidden since the user cannot
+// interact with them — only airborne and on-runway aircraft are shown.
+func RenderFlightStrips(planes []aircraft.Aircraft, role config.Role) string {
 	if len(planes) == 0 {
 		return ui.SidebarBox.Render(ui.Dim.Render("  No aircraft in airspace"))
 	}
@@ -315,16 +316,37 @@ func RenderFlightStrips(planes []aircraft.Aircraft) string {
 	sb.WriteString(ui.SidebarTitle.Render(" FLIGHT STRIPS ") + "\n")
 	sb.WriteString(strings.Repeat("─", 28) + "\n")
 
+	count := 0
 	for _, ac := range planes {
-		if ac.State == aircraft.Landed {
+		if skipFromStrip(ac, role) {
 			continue
 		}
 		strip := renderStrip(ac)
 		sb.WriteString(zone.Mark(ac.Callsign, strip))
 		sb.WriteString(strings.Repeat("─", 28) + "\n")
+		count++
+	}
+
+	if count == 0 {
+		return ui.SidebarBox.Render(ui.Dim.Render("  No aircraft in airspace"))
 	}
 
 	return ui.SidebarBox.Render(sb.String())
+}
+
+// skipFromStrip returns true if the aircraft should be hidden from the strip list.
+// In TRACON mode, ground aircraft below OnRunway are automated and not shown.
+func skipFromStrip(ac aircraft.Aircraft, role config.Role) bool {
+	if ac.State == aircraft.Landed {
+		return true
+	}
+	if role == config.RoleTRACON {
+		switch ac.State {
+		case aircraft.Taxiing, aircraft.AtGate, aircraft.Pushback, aircraft.HoldShort:
+			return true
+		}
+	}
+	return false
 }
 
 func renderStrip(ac aircraft.Aircraft) string {
@@ -368,8 +390,8 @@ func renderStrip(ac aircraft.Aircraft) string {
 		}
 		if len(info) > 0 {
 			sb.WriteString(ui.Dim.Render(" " + strings.Join(info, " | ")))
+			sb.WriteRune('\n')
 		}
-		sb.WriteRune('\n')
 	} else {
 		altArrow := " "
 		if ac.Altitude < ac.TargetAltitude {
@@ -399,9 +421,9 @@ func renderStrip(ac aircraft.Aircraft) string {
 
 		if len(targets) > 0 {
 			sb.WriteString(ui.Dim.Render(" → " + strings.Join(targets, " ")))
+			sb.WriteRune('\n')
 		}
 	}
-	sb.WriteRune('\n')
 
 	return sb.String()
 }

@@ -5,7 +5,7 @@ GOPATH    := $(shell $(GO) env GOPATH)
 GOFLAGS   ?=
 LDFLAGS   ?= -s -w
 
-.PHONY: all build run watch clean test test-race cover cover-html lint vet fmt tidy help
+.PHONY: all build run dev watch clean test test-race cover cover-html lint vet fmt tidy help
 
 all: fmt vet test build ## Default: format, vet, test, build
 
@@ -14,6 +14,9 @@ build: ## Build the binary
 
 run: build ## Build and run the game
 	./$(BINARY)
+
+dev: build ## Build and run with developer mode (/ commands)
+	./$(BINARY) -dev
 
 watch: ## Rebuild on .go file changes (install entr: brew install entr)
 	@command -v entr >/dev/null 2>&1 || { echo "Install entr: brew install entr"; exit 1; }
