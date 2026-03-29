@@ -13,11 +13,11 @@ import (
 )
 
 const (
-	stripWidth     = 200
-	stripHeight    = 48
-	stripPadding   = 2
-	stripMargin    = 8 // left margin inside sidebar
-	sidebarPadding = 4
+	stripWidth     = 240
+	stripHeight    = 60
+	stripPadding   = 3
+	stripMargin    = 10 // left margin inside sidebar
+	sidebarPadding = 5
 )
 
 // Strip colors.
@@ -77,7 +77,7 @@ func (g *Game) layoutStrips() ([]stripLayout, float64, float64, float64, float64
 
 		if len(arrivals) > 0 {
 			layout = append(layout, stripLayout{section: "ARRIVALS", x: sx + stripMargin, y: y})
-			y += 14
+			y += 18
 			for _, ac := range arrivals {
 				if y+stripHeight > sy+sh {
 					break
@@ -90,7 +90,7 @@ func (g *Game) layoutStrips() ([]stripLayout, float64, float64, float64, float64
 		if len(departures) > 0 && y+18 < sy+sh {
 			y += 4
 			layout = append(layout, stripLayout{section: "DEPARTURES", x: sx + stripMargin, y: y})
-			y += 14
+			y += 18
 			for _, ac := range departures {
 				if y+stripHeight > sy+sh {
 					break
@@ -101,7 +101,7 @@ func (g *Game) layoutStrips() ([]stripLayout, float64, float64, float64, float64
 		}
 	} else {
 		layout = append(layout, stripLayout{section: "FLIGHT STRIPS", x: sx + stripMargin, y: y})
-		y += 14
+		y += 18
 		for _, ac := range planes {
 			if g.gameConfig.Role == config.RoleTRACON && skipStrip(ac) {
 				continue
@@ -144,7 +144,7 @@ func (g *Game) drawStrips(screen *ebiten.Image) {
 
 	for _, sl := range layout {
 		if sl.section != "" {
-			drawLabel(screen, sl.x, sl.y, sl.section, 8, sectionTitle)
+			drawLabel(screen, sl.x, sl.y, sl.section, 12, sectionTitle)
 		} else {
 			g.drawStrip(screen, sl.ac, sl.x, sl.y)
 		}
@@ -162,11 +162,11 @@ func (g *Game) drawStrip(screen *ebiten.Image, ac aircraft.Aircraft, x, y float6
 
 	// Callsign (color-coded by state/patience).
 	csColor := callsignColor(ac, g.activeViolations)
-	drawLabel(screen, x+4, y+3, ac.Callsign, 10, csColor)
+	drawLabel(screen, x+6, y+4, ac.Callsign, 14, csColor)
 
 	// State tag (right-aligned).
 	stateStr := ac.State.String()
-	drawLabel(screen, x+w-40, y+3, stateStr, 8, stripState)
+	drawLabel(screen, x+w-50, y+4, stateStr, 11, stripState)
 
 	// Line 2: depends on airborne vs ground.
 	if ac.State.IsAirborne() {
@@ -177,7 +177,7 @@ func (g *Game) drawStrip(screen *ebiten.Image, ac aircraft.Aircraft, x, y float6
 			altArrow = "\u2193"
 		}
 		info := fmt.Sprintf("%03d  %s%02d  S%d", ac.Heading, altArrow, ac.Altitude, ac.Speed)
-		drawLabel(screen, x+4, y+18, info, 8, stripData)
+		drawLabel(screen, x+6, y+22, info, 11, stripData)
 
 		// Line 3: targets (if different from current).
 		var targets []string
@@ -196,7 +196,7 @@ func (g *Game) drawStrip(screen *ebiten.Image, ac aircraft.Aircraft, x, y float6
 			targets = append(targets, "D "+ac.TargetFixName)
 		}
 		if len(targets) > 0 {
-			drawLabel(screen, x+4, y+32, strings.Join(targets, " "), 7, stripTarget)
+			drawLabel(screen, x+6, y+40, strings.Join(targets, " "), 10, stripTarget)
 		}
 	} else {
 		// Ground info.
@@ -211,7 +211,7 @@ func (g *Game) drawStrip(screen *ebiten.Image, ac aircraft.Aircraft, x, y float6
 			info += "Rwy " + ac.AssignedRunway
 		}
 		if info != "" {
-			drawLabel(screen, x+4, y+18, info, 8, stripData)
+			drawLabel(screen, x+6, y+22, info, 11, stripData)
 		}
 	}
 

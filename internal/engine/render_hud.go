@@ -31,9 +31,9 @@ var (
 )
 
 const (
-	hudHeight   = 28
-	inputHeight = 28
-	radioHeight = 100
+	hudHeight   = 36
+	inputHeight = 36
+	radioHeight = 130
 	radioLines  = 5
 )
 
@@ -44,31 +44,31 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 	// Background bar.
 	vector.DrawFilledRect(screen, 0, 0, w, hudHeight, hudBg, false)
 
-	y := float64(6)
-	x := float64(10)
+	y := float64(8)
+	x := float64(12)
 
 	// Role.
-	drawLabel(screen, x, y, g.gameConfig.Role.String(), 11, hudValue)
-	x += 80
+	drawLabel(screen, x, y, g.gameConfig.Role.String(), 16, hudValue)
+	x += 100
 
 	// Score.
-	drawLabel(screen, x, y, "SCORE", 9, hudLabel)
+	drawLabel(screen, x, y, "SCORE", 12, hudLabel)
+	x += 55
+	drawLabel(screen, x, y, fmt.Sprintf("%d", g.score), 16, hudValue)
 	x += 45
-	drawLabel(screen, x, y, fmt.Sprintf("%d", g.score), 11, hudValue)
-	x += 40
 
 	// Aircraft count.
-	drawLabel(screen, x, y, "AIRCRAFT", 9, hudLabel)
-	x += 65
-	drawLabel(screen, x, y, fmt.Sprintf("%d", len(g.aircraft)), 11, hudValue)
-	x += 30
+	drawLabel(screen, x, y, "AIRCRAFT", 12, hudLabel)
+	x += 80
+	drawLabel(screen, x, y, fmt.Sprintf("%d", len(g.aircraft)), 16, hudValue)
+	x += 35
 
 	// Near misses.
 	if g.nearMisses > 0 {
-		drawLabel(screen, x, y, "NEAR MISS", 9, hudLabel)
-		x += 75
-		drawLabel(screen, x, y, fmt.Sprintf("%d", g.nearMisses), 11, hudWarning)
-		x += 30
+		drawLabel(screen, x, y, "NEAR MISS", 12, hudLabel)
+		x += 90
+		drawLabel(screen, x, y, fmt.Sprintf("%d", g.nearMisses), 16, hudWarning)
+		x += 35
 	}
 
 	// Time.
@@ -84,7 +84,7 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 		timeStr += fmt.Sprintf(" %dx", g.speedMultiplier)
 	}
 
-	drawLabel(screen, float64(g.width)-120, y, timeStr, 11, hudText)
+	drawLabel(screen, float64(g.width)-160, y, timeStr, 16, hudText)
 }
 
 // drawRadioLog renders the radio message log above the input.
@@ -106,15 +106,15 @@ func (g *Game) drawRadioLog(screen *ebiten.Image) {
 		start = 0
 	}
 
-	y := float64(baseY) + 4
+	y := float64(baseY) + 6
 	for _, msg := range messages[start:] {
 		c := radioMsgColor(msg)
 		timestamp := formatTimestamp(msg.Time)
 		prefix := timestamp + " "
 
-		drawLabel(screen, 10, y, prefix, 9, hudLabel)
-		drawLabel(screen, 10+float64(len(prefix)*6), y, msg.Text, 9, c)
-		y += 16
+		drawLabel(screen, 12, y, prefix, 13, hudLabel)
+		drawLabel(screen, 12+float64(len(prefix)*8), y, msg.Text, 13, c)
+		y += 22
 	}
 }
 
@@ -129,19 +129,19 @@ func (g *Game) drawInput(screen *ebiten.Image) {
 	// Separator line.
 	vector.StrokeLine(screen, 0, baseY, w, baseY, 1, hudLabel, false)
 
-	y := float64(baseY) + 7
+	y := float64(baseY) + 8
 
 	// Prompt.
-	drawLabel(screen, 10, y, "ATC>", 11, inputPrompt)
+	drawLabel(screen, 12, y, "ATC>", 16, inputPrompt)
 
 	// Input text.
 	txt := g.input.Text()
-	drawLabel(screen, 55, y, txt, 11, inputText)
+	drawLabel(screen, 65, y, txt, 16, inputText)
 
 	// Blinking cursor.
-	if g.tickCount%10 < 6 { // blink every ~0.6s
-		cursorX := 55 + float64(g.input.Cursor())*7.2 // approximate monospace width
-		vector.StrokeLine(screen, float32(cursorX), float32(y), float32(cursorX), float32(y)+12, 1.5, inputCursor, false)
+	if g.tickCount%10 < 6 {
+		cursorX := 65 + float64(g.input.Cursor())*9.6 // approximate monospace width at size 16
+		vector.StrokeLine(screen, float32(cursorX), float32(y), float32(cursorX), float32(y)+16, 2, inputCursor, false)
 	}
 }
 
@@ -156,9 +156,9 @@ func (g *Game) drawGameOver(screen *ebiten.Image) {
 	cx := float64(g.width) / 2
 	cy := float64(g.height) / 2
 
-	drawLabel(screen, cx-60, cy-30, "GAME OVER", 18, gameOverTxt)
-	drawLabel(screen, cx-50, cy, fmt.Sprintf("Score: %d", g.score), 14, hudText)
-	drawLabel(screen, cx-70, cy+30, "R restart  |  Esc quit", 10, hudLabel)
+	drawLabel(screen, cx-80, cy-40, "GAME OVER", 28, gameOverTxt)
+	drawLabel(screen, cx-60, cy, fmt.Sprintf("Score: %d", g.score), 20, hudText)
+	drawLabel(screen, cx-100, cy+40, "R restart  |  Esc quit", 14, hudLabel)
 }
 
 func radioMsgColor(msg radio.Message) color.Color {
