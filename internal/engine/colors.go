@@ -45,6 +45,7 @@ var (
 	traconDataBlock = color.RGBA{0x00, 0xcc, 0x44, 0xff} // green data block text
 	traconLeader    = color.RGBA{0x00, 0x88, 0x33, 0xff} // dim green leader line
 	traconTrail     = color.RGBA{0x00, 0x88, 0x33, 0xff} // history trail (base, faded per dot)
+	traconLanding   = color.RGBA{0xcc, 0xcc, 0x00, 0xff} // yellow for cleared-to-land
 	traconConflict  = color.RGBA{0xff, 0x33, 0x33, 0xff} // bright red conflict/alert
 )
 

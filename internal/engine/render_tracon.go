@@ -2,8 +2,10 @@ package engine
 
 import (
 	"fmt"
+	"image/color"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/Jasrags/atc/internal/aircraft"
 	"github.com/Jasrags/atc/internal/gamemap"
@@ -18,7 +20,9 @@ func (g *Game) drawTRACON(screen *ebiten.Image) {
 	g.drawTraconRangeRings(screen)
 	g.drawTraconFixes(screen)
 	g.drawTraconRunways(screen)
+	g.drawTraconCompassRose(screen)
 	g.drawTraconAircraft(screen)
+	g.drawMinimap(screen)
 }
 
 // --- Grid ---
@@ -119,6 +123,47 @@ func (g *Game) drawTraconRunway(screen *ebiten.Image, rw gamemap.Runway) {
 		fmt.Sprintf("%d", numOpposite), 9, traconRunwayNum)
 }
 
+// --- Compass rose ---
+
+var compassLabels = map[int]string{
+	0: "N", 30: "03", 60: "06", 90: "E",
+	120: "12", 150: "15", 180: "S", 210: "21",
+	240: "24", 270: "W", 300: "30", 330: "33",
+}
+
+func (g *Game) drawTraconCompassRose(screen *ebiten.Image) {
+	// Draw around the outermost range ring.
+	rw := g.gameMap.PrimaryRunway()
+	cx, cy := g.camera.WorldToScreen(float64(rw.X), float64(rw.Y))
+	radius := g.camera.ScaledSize(42) // just outside the 40-cell range ring
+
+	for deg := 0; deg < 360; deg += 10 {
+		rad := float64(deg) * math.Pi / 180
+		sin := math.Sin(rad)
+		cos := -math.Cos(rad)
+
+		// Tick mark.
+		inner := radius - 4
+		outer := radius
+		if deg%30 == 0 {
+			outer = radius + 2 // longer tick for labeled headings
+		}
+
+		x1 := float64(cx) + sin*inner
+		y1 := float64(cy) + cos*inner
+		x2 := float64(cx) + sin*outer
+		y2 := float64(cy) + cos*outer
+		vector.StrokeLine(screen, float32(x1), float32(y1), float32(x2), float32(y2), 0.8, traconRangeRing, false)
+
+		// Label at 30-degree intervals.
+		if label, ok := compassLabels[deg]; ok {
+			lx := float64(cx) + sin*(radius+8) - 4
+			ly := float64(cy) + cos*(radius+8) - 4
+			drawLabel(screen, lx, ly, label, 7, traconFixLabel)
+		}
+	}
+}
+
 // --- Live aircraft rendering ---
 
 func (g *Game) drawTraconAircraft(screen *ebiten.Image) {
@@ -128,7 +173,8 @@ func (g *Game) drawTraconAircraft(screen *ebiten.Image) {
 			continue
 		}
 
-		sx, sy := g.camera.WorldToScreen(ac.X, ac.Y)
+		ix, iy := g.interpolatedPosition(ac)
+		sx, sy := g.camera.WorldToScreen(ix, iy)
 
 		// History trail — fading dots from oldest (dimmest) to newest.
 		trailR := float32(1.5 * g.camera.Zoom)
@@ -155,8 +201,18 @@ func (g *Game) drawTraconAircraft(screen *ebiten.Image) {
 			blipR = 8
 		}
 		targetColor := traconTarget
-		if isViolating(ac.Callsign, g.activeViolations) {
-			targetColor = traconConflict
+		violating := isViolating(ac.Callsign, g.activeViolations)
+		if violating {
+			// Blink red at 2Hz (on 70% of the time).
+			if blinkVisible(g.elapsed, 500*time.Millisecond, 0.7) {
+				targetColor = traconConflict
+			} else {
+				targetColor = colorWithAlpha(traconConflict, 0.3)
+			}
+		} else if ac.State == aircraft.Landing {
+			// Pulse yellow for cleared-to-land aircraft.
+			alpha := pulseAlpha(g.elapsed, 2*time.Second, 0.5, 1.0)
+			targetColor = colorWithAlpha(traconLanding, alpha)
 		}
 		vector.DrawFilledCircle(screen, float32(sx), float32(sy), blipR, targetColor, false)
 
@@ -166,16 +222,31 @@ func (g *Game) drawTraconAircraft(screen *ebiten.Image) {
 		ly := sy - leaderLen
 		vector.StrokeLine(screen, float32(sx), float32(sy), float32(lx), float32(ly), 0.8, traconLeader, false)
 
-		// Data block.
+		// Data block — color reflects patience/state.
+		dbColor := traconDataBlock
+		switch {
+		case violating:
+			dbColor = traconConflict
+		case ac.PatienceLevel() >= 3:
+			// Angry — blink red.
+			if blinkVisible(g.elapsed, 400*time.Millisecond, 0.6) {
+				dbColor = traconConflict
+			}
+		case ac.PatienceLevel() >= 2:
+			dbColor = color.RGBA{0xff, 0x88, 0x00, 0xff} // orange
+		case ac.PatienceLevel() >= 1:
+			dbColor = color.RGBA{0xcc, 0xcc, 0x00, 0xff} // yellow
+		}
+
 		altArrow := " "
 		if ac.Altitude < ac.TargetAltitude {
 			altArrow = "\u2191" // ↑
 		} else if ac.Altitude > ac.TargetAltitude {
 			altArrow = "\u2193" // ↓
 		}
-		drawLabel(screen, lx+3, ly-10, ac.Callsign, 9, traconDataBlock)
+		drawLabel(screen, lx+3, ly-10, ac.Callsign, 9, dbColor)
 		drawLabel(screen, lx+3, ly,
-			fmt.Sprintf("%02d %02d%s", ac.Altitude, ac.Speed*10, altArrow), 8, traconDataBlock)
+			fmt.Sprintf("%02d %02d%s", ac.Altitude, ac.Speed*10, altArrow), 8, dbColor)
 	}
 }
 

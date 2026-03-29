@@ -2,7 +2,10 @@ package engine
 
 import (
 	"fmt"
+	"image/color"
 	"math"
+	"strings"
+	"time"
 
 	"github.com/Jasrags/atc/internal/aircraft"
 	"github.com/Jasrags/atc/internal/gamemap"
@@ -19,6 +22,7 @@ func (g *Game) drawTower(screen *ebiten.Image) {
 	g.drawTowerRunways(screen)
 	g.drawTowerAircraft(screen)
 	g.drawTowerApproachInset(screen)
+	g.drawMinimap(screen)
 }
 
 // --- Runways (filled rectangles with threshold markings) ---
@@ -81,21 +85,69 @@ func (g *Game) drawTowerRunway(screen *ebiten.Image, rw gamemap.Runway) {
 	// Dashed centerline.
 	drawDashedLine(screen, float32(sx1), float32(sy1), float32(sx2), float32(sy2), 4, 3, 0.8, towerRunwayEdge)
 
-	// Threshold markings.
+	// Threshold markings — multiple bars (FAA style).
 	threshW := float32(hw * 0.8)
-	vector.StrokeLine(screen, float32(sx1)+float32(perpX)*threshW, float32(sy1)+float32(perpY)*threshW,
-		float32(sx1)-float32(perpX)*threshW, float32(sy1)-float32(perpY)*threshW, 2, towerThreshold, false)
-	vector.StrokeLine(screen, float32(sx2)+float32(perpX)*threshW, float32(sy2)+float32(perpY)*threshW,
-		float32(sx2)-float32(perpX)*threshW, float32(sy2)-float32(perpY)*threshW, 2, towerThreshold, false)
+	for _, offset := range []float64{0, 0.4, -0.4} {
+		tx := float32(sx1) + float32(dx*offset*cellSize*g.camera.Zoom)
+		ty := float32(sy1) + float32(dy*offset*cellSize*g.camera.Zoom)
+		vector.StrokeLine(screen, tx+float32(perpX)*threshW, ty+float32(perpY)*threshW,
+			tx-float32(perpX)*threshW, ty-float32(perpY)*threshW, 1.5, towerThreshold, false)
+	}
+	// Threshold bars at the other end.
+	for _, offset := range []float64{0, 0.4, -0.4} {
+		tx := float32(sx2) + float32(dx*offset*cellSize*g.camera.Zoom)
+		ty := float32(sy2) + float32(dy*offset*cellSize*g.camera.Zoom)
+		vector.StrokeLine(screen, tx+float32(perpX)*threshW, ty+float32(perpY)*threshW,
+			tx-float32(perpX)*threshW, ty-float32(perpY)*threshW, 1.5, towerThreshold, false)
+	}
 
-	// Runway numbers at each threshold.
+	// Runway numbers inside the surface, near each threshold.
 	numApproach := gamemap.RunwayNumber(rw.Heading)
 	numOpposite := gamemap.RunwayNumber(rw.OppositeHeading())
 
-	drawLabel(screen, sx2+dx*20, sy2-dy*20-5,
-		fmt.Sprintf("%d", numApproach), 11, towerRunwayNum)
-	drawLabel(screen, sx1-dx*20-18, sy1+dy*20-5,
-		fmt.Sprintf("%d", numOpposite), 11, towerRunwayNum)
+	// Inset from threshold toward center.
+	inset := g.camera.ScaledSize(1.5)
+	drawLabel(screen, sx2-dx*inset-6, sy2+dy*inset-5,
+		fmt.Sprintf("%d", numApproach), 10, towerRunwayNum)
+	drawLabel(screen, sx1+dx*inset-6, sy1-dy*inset-5,
+		fmt.Sprintf("%d", numOpposite), 10, towerRunwayNum)
+
+	// Draw connector stubs from runway entry nodes to the runway centerline.
+	// Only draw connectors belonging to this runway.
+	for _, node := range g.gameMap.TaxiNodes {
+		if node.Type != gamemap.NodeRunwayEntry {
+			continue
+		}
+		// Filter: only entry nodes for this runway (check if runway name contains the node's runway designator).
+		if node.Runway != "" && !strings.Contains(rw.Name, node.Runway) {
+			continue
+		}
+		nsx, nsy := g.camera.WorldToScreen(float64(node.X), float64(node.Y))
+		// Project node position onto the runway centerline.
+		// Nearest point on line (x1,y1)-(x2,y2) to point (node.X, node.Y).
+		nx, ny := float64(node.X), float64(node.Y)
+		lineLen := halfLen * 2
+		if lineLen == 0 {
+			continue
+		}
+		// Project node onto runway centerline via dot product.
+		projT := ((nx-x1)*(x2-x1) + (ny-y1)*(y2-y1)) / (lineLen * lineLen)
+		if projT < 0 {
+			projT = 0
+		}
+		if projT > 1 {
+			projT = 1
+		}
+		projX := x1 + projT*(x2-x1)
+		projY := y1 + projT*(y2-y1)
+		rsx, rsy := g.camera.WorldToScreen(projX, projY)
+
+		tw := float32(g.camera.Zoom * 2)
+		if tw < 1 {
+			tw = 1
+		}
+		vector.StrokeLine(screen, float32(nsx), float32(nsy), float32(rsx), float32(rsy), tw, towerTaxiway, false)
+	}
 }
 
 // --- Taxiways ---
@@ -186,16 +238,25 @@ func (g *Game) drawTowerAircraft(screen *ebiten.Image) {
 			continue
 		}
 
-		sx, sy := g.camera.WorldToScreen(ac.X, ac.Y)
+		ix, iy := g.interpolatedPosition(ac)
+		sx, sy := g.camera.WorldToScreen(ix, iy)
 
-		// Color: departures = cyan, arrivals/ground = green, conflict = red.
+		// Color: departures = cyan, arrivals/ground = green, conflict = red blink.
 		c := towerTarget
 		if ac.State == aircraft.Departing || ac.State == aircraft.OnRunway ||
 			ac.State == aircraft.Pushback || (ac.State == aircraft.AtGate && ac.AssignedRunway != "") {
 			c = towerDeparture
 		}
+		if ac.State == aircraft.Landing {
+			alpha := pulseAlpha(g.elapsed, 2*time.Second, 0.5, 1.0)
+			c = colorWithAlpha(color.RGBA{0xcc, 0xcc, 0x00, 0xff}, alpha)
+		}
 		if isViolating(ac.Callsign, g.activeViolations) {
-			c = towerConflict
+			if blinkVisible(g.elapsed, 500*time.Millisecond, 0.7) {
+				c = towerConflict
+			} else {
+				c = colorWithAlpha(towerConflict, 0.3)
+			}
 		}
 
 		// Chevron/symbol size scales with zoom.
@@ -251,8 +312,9 @@ func (g *Game) drawTowerApproachInset(screen *ebiten.Image) {
 		// Map aircraft position relative to runway into the inset box.
 		// The approach course is along the runway heading.
 		// Distance from runway center, projected onto approach axis.
-		dx := ac.X - float64(rw.X)
-		dy := ac.Y - float64(rw.Y)
+		acIX, acIY := g.interpolatedPosition(ac)
+		dx := acIX - float64(rw.X)
+		dy := acIY - float64(rw.Y)
 		dist := math.Sqrt(dx*dx + dy*dy)
 
 		// Map distance (0-60 cells) to inset X position.

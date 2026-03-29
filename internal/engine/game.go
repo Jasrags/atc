@@ -43,6 +43,7 @@ type Game struct {
 
 	// Aircraft state
 	aircraft       map[string]aircraft.Aircraft
+	prevPositions  map[string][2]float64 // previous tick positions for interpolation
 	spawner        *aircraft.Spawner
 	runways        []runway.Runway
 	spawnDeparture bool
@@ -56,6 +57,7 @@ type Game struct {
 	elapsed         time.Duration
 	timeFrozen      bool
 	speedMultiplier int
+	lastUpdateTime  time.Time // wall clock of last Update call, for draw interpolation
 
 	// Radio
 	radioLog radio.Log
@@ -102,6 +104,7 @@ func NewGame(gm gamemap.Map, role config.Role, devMode bool) *Game {
 		camera:           cam,
 		screen:           screenPlaying,
 		aircraft:         make(map[string]aircraft.Aircraft),
+		prevPositions:    make(map[string][2]float64),
 		spawner:          aircraft.NewSpawner(time.Now().UnixNano(), cfg),
 		runways:          runways,
 		speedMultiplier:  1,
@@ -167,6 +170,12 @@ func (g *Game) Update() error {
 	// Physics — skip when frozen.
 	if !g.timeFrozen {
 		for i := 0; i < g.speedMultiplier; i++ {
+			// Snapshot the penultimate tick for interpolation —
+			// always capture the state just before the final tick.
+			if i == g.speedMultiplier-1 {
+				g.snapshotPositions()
+			}
+
 			g.tickCount++
 			g.elapsed = time.Duration(g.tickCount) * (time.Second / gameTPS)
 
@@ -181,7 +190,41 @@ func (g *Game) Update() error {
 		}
 	}
 
+	g.lastUpdateTime = time.Now()
 	return nil
+}
+
+// snapshotPositions saves current aircraft positions for draw interpolation.
+func (g *Game) snapshotPositions() {
+	for callsign, ac := range g.aircraft {
+		g.prevPositions[callsign] = [2]float64{ac.X, ac.Y}
+	}
+}
+
+// interpolatedPosition returns a smoothly interpolated position between
+// the previous tick position and the current position based on time elapsed
+// since the last Update call.
+func (g *Game) interpolatedPosition(ac aircraft.Aircraft) (float64, float64) {
+	prev, hasPrev := g.prevPositions[ac.Callsign]
+	if !hasPrev || g.timeFrozen {
+		return ac.X, ac.Y
+	}
+
+	// Fraction of a tick interval elapsed since last Update.
+	tickDuration := time.Second / gameTPS
+	elapsed := time.Since(g.lastUpdateTime)
+	t := float64(elapsed) / float64(tickDuration)
+	if t > 1 {
+		t = 1
+	}
+	if t < 0 {
+		t = 0
+	}
+
+	// Lerp from previous to current.
+	x := prev[0] + (ac.X-prev[0])*t
+	y := prev[1] + (ac.Y-prev[1])*t
+	return x, y
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
