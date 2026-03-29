@@ -186,6 +186,11 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Time frozen: skip physics and spawning, but keep tick loop alive for rendering.
+	if m.timeFrozen {
+		return m, tickCmd()
+	}
+
 	elapsed := m.stopwatch.Elapsed()
 
 	// Speed multiplier: run physics N times per render frame.

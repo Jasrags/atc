@@ -139,23 +139,6 @@ func (m Model) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// --- Paused ---
-
-func (m Model) handlePausedKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, m.keys.Pause):
-		m.screen = screenPlaying
-		return m, tea.Batch(tickCmd(), m.stopwatch.Start())
-	case key.Matches(msg, m.keys.Quit):
-		return m, tea.Quit
-	case key.Matches(msg, m.keys.Back):
-		m.screen = screenMenu
-		m.menuSelected = 0
-		return m, nil
-	}
-	return m, nil
-}
-
 // --- Game Over ---
 
 func (m Model) handleGameOverKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

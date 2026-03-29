@@ -94,7 +94,7 @@ func TestSetupShiftTabCyclesBack(t *testing.T) {
 func TestSetupUpDownChangesSelection(t *testing.T) {
 	m := NewModel(false)
 	m.menuScreen = menuSetup
-	m.setupFocus = setupDiff // Difficulty: Easy/Normal/Hard
+	m.setupFocus = setupDiff         // Difficulty: Easy/Normal/Hard
 	m.setupSelections[setupDiff] = 1 // Normal
 
 	// Down -> Hard
@@ -138,9 +138,9 @@ func TestSetupStartsGame(t *testing.T) {
 func TestSetupBuildsConfig(t *testing.T) {
 	m := NewModel(false)
 	m.menuScreen = menuSetup
-	m.setupSelections[setupDiff] = 2      // Hard
-	m.setupSelections[setupCallsign] = 1  // Short
-	m.setupSelections[setupTrails] = 0    // On
+	m.setupSelections[setupDiff] = 2     // Hard
+	m.setupSelections[setupCallsign] = 1 // Short
+	m.setupSelections[setupTrails] = 0   // On
 
 	cfg := m.buildConfigFromSetup()
 	if cfg.Difficulty != config.DifficultyHard {
@@ -223,29 +223,32 @@ func TestPlayingEscGoesToMenu(t *testing.T) {
 	}
 }
 
-func TestPlayingPause(t *testing.T) {
+func TestPlayingFreeze(t *testing.T) {
 	m := newPlayingModel()
 
 	res, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	model := res.(Model)
 
-	if model.screen != screenPaused {
-		t.Errorf("expected screenPaused, got %d", model.screen)
+	if model.screen != screenPlaying {
+		t.Errorf("expected screenPlaying (freeze stays on playing screen), got %d", model.screen)
+	}
+	if !model.timeFrozen {
+		t.Error("expected timeFrozen=true after pressing p")
 	}
 	if cmd == nil {
-		t.Error("expected stopwatch stop command when pausing")
+		t.Error("expected stopwatch stop command when freezing")
 	}
 }
 
-func TestPlayingPauseBlockedWhileTyping(t *testing.T) {
+func TestPlayingFreezeBlockedWhileTyping(t *testing.T) {
 	m := newPlayingModel()
 	m.input.SetValue("AA123 ")
 
 	res, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	model := res.(Model)
 
-	if model.screen != screenPlaying {
-		t.Error("pressing 'p' while typing should NOT pause")
+	if model.timeFrozen {
+		t.Error("pressing 'p' while typing should NOT freeze")
 	}
 	if !strings.Contains(model.input.Value(), "p") {
 		t.Error("'p' should be forwarded to input when typing")
@@ -264,46 +267,27 @@ func TestPlayingHelpBlockedWhileTyping(t *testing.T) {
 	}
 }
 
-func TestPauseResume(t *testing.T) {
+func TestFreezeResume(t *testing.T) {
 	m := newPlayingModel()
-	m.screen = screenPaused
+	m.timeFrozen = true
 
 	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	model := result.(Model)
 
+	if model.timeFrozen {
+		t.Error("expected timeFrozen=false after pressing p again")
+	}
 	if model.screen != screenPlaying {
 		t.Errorf("expected screenPlaying, got %d", model.screen)
 	}
 	if cmd == nil {
-		t.Error("expected tick command after unpausing")
+		t.Error("expected tick+stopwatch command after unfreezing")
 	}
 }
 
-func TestPauseQuit(t *testing.T) {
-	m := NewModel(false)
-	m.screen = screenPaused
-
-	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	if cmd == nil {
-		t.Error("expected quit command")
-	}
-}
-
-func TestPauseEscGoesToMenu(t *testing.T) {
-	m := NewModel(false)
-	m.screen = screenPaused
-
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEscape})
-	model := result.(Model)
-
-	if model.screen != screenMenu {
-		t.Errorf("expected screenMenu, got %d", model.screen)
-	}
-}
-
-func TestPauseStopsTick(t *testing.T) {
+func TestFreezeStopsTick(t *testing.T) {
 	m := newPlayingModel()
-	m.screen = screenPaused
+	m.timeFrozen = true
 
 	ac := aircraft.New("AA1", 30, 15, 90, 5, 3)
 	m.aircraft["AA1"] = ac
@@ -311,11 +295,79 @@ func TestPauseStopsTick(t *testing.T) {
 	result, cmd := m.Update(tickMsg(time.Now()))
 	model := result.(Model)
 
-	if cmd != nil {
-		t.Error("expected no tick command while paused")
+	if cmd == nil {
+		t.Error("expected tick command to keep render loop alive while frozen")
 	}
 	if model.aircraft["AA1"].X != ac.X {
-		t.Error("aircraft should not move while paused")
+		t.Error("aircraft should not move while frozen")
+	}
+}
+
+func TestSpeedUpDown(t *testing.T) {
+	m := newPlayingModel()
+	if m.speedMultiplier != 1 {
+		t.Fatalf("expected initial speed 1, got %d", m.speedMultiplier)
+	}
+
+	// Speed up
+	res, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	model := res.(Model)
+	if model.speedMultiplier != 2 {
+		t.Errorf("expected speed 2 after ], got %d", model.speedMultiplier)
+	}
+
+	// Speed down back to 1
+	res, _ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	model = res.(Model)
+	if model.speedMultiplier != 1 {
+		t.Errorf("expected speed 1 after [, got %d", model.speedMultiplier)
+	}
+
+	// Speed down clamps at 1
+	res, _ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	model = res.(Model)
+	if model.speedMultiplier != 1 {
+		t.Errorf("expected speed clamped at 1, got %d", model.speedMultiplier)
+	}
+}
+
+func TestSpeedClampsAt12(t *testing.T) {
+	m := newPlayingModel()
+	m.speedMultiplier = 12
+
+	res, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	model := res.(Model)
+	if model.speedMultiplier != 12 {
+		t.Errorf("expected speed clamped at 12, got %d", model.speedMultiplier)
+	}
+}
+
+func TestSpeedBlockedWhileTyping(t *testing.T) {
+	m := newPlayingModel()
+	m.input.SetValue("AA123 ")
+
+	res, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	model := res.(Model)
+	if model.speedMultiplier != 1 {
+		t.Error("speed should not change while typing")
+	}
+}
+
+func TestNewGameResetsTimeControls(t *testing.T) {
+	m := newPlayingModel()
+	m.timeFrozen = true
+	m.speedMultiplier = 8
+
+	// Go to menu and start new game
+	m.screen = screenMenu
+	m.menuScreen = menuSetup
+	started, _ := m.startGame()
+
+	if started.timeFrozen {
+		t.Error("expected timeFrozen=false after new game")
+	}
+	if started.speedMultiplier != 1 {
+		t.Errorf("expected speed=1 after new game, got %d", started.speedMultiplier)
 	}
 }
 

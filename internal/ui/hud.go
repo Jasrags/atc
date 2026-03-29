@@ -10,15 +10,22 @@ import (
 )
 
 // RenderHUD builds the heads-up display with score, aircraft count, and elapsed time.
-func RenderHUD(score int, aircraftCount int, elapsed time.Duration, role string, nearMisses int, devStatus string) string {
+func RenderHUD(score int, aircraftCount int, elapsed time.Duration, role string, nearMisses int, timeStatus string, devStatus string) string {
 	nmStr := fmt.Sprintf("%d", nearMisses)
 	label := "ATC"
 	if devStatus != "" {
 		label = devStatus
 	}
+
+	// Build the time column: elapsed time + optional speed/freeze indicator
+	timeStr := formatDuration(elapsed)
+	if timeStatus != "" {
+		timeStr = timeStr + " " + timeStatus
+	}
+
 	t := table.New().
 		Headers("", "ROLE", "SCORE", "AIRCRAFT", "NEAR MISS", "TIME").
-		Row(label, role, fmt.Sprintf("%d", score), fmt.Sprintf("%d", aircraftCount), nmStr, formatDuration(elapsed)).
+		Row(label, role, fmt.Sprintf("%d", score), fmt.Sprintf("%d", aircraftCount), nmStr, timeStr).
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("63"))).
 		StyleFunc(func(row, col int) lipgloss.Style {
@@ -38,16 +45,6 @@ func formatDuration(d time.Duration) string {
 	m := int(d.Minutes())
 	s := int(d.Seconds()) % 60
 	return fmt.Sprintf("%02d:%02d", m, s)
-}
-
-// RenderPaused builds the paused overlay.
-func RenderPaused(score int, elapsed time.Duration) string {
-	title := HUDTitle.Render(" PAUSED ")
-	scoreStr := HUDScore.Render(fmt.Sprintf("Score: %d  Time: %s", score, formatDuration(elapsed)))
-	hint := Dim.Render("P resume  |  Esc menu  |  Q quit")
-
-	content := strings.Join([]string{title, "", scoreStr, "", hint}, "\n")
-	return HelpBox.Render(content)
 }
 
 // RenderGameOver builds the game over overlay.

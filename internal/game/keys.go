@@ -5,10 +5,12 @@ import "github.com/charmbracelet/bubbles/key"
 // keyMap defines all keybindings for the game, implementing help.KeyMap.
 type keyMap struct {
 	// Playing
-	Submit key.Binding
-	Pause  key.Binding
-	Help   key.Binding
-	Back   key.Binding
+	Submit  key.Binding
+	Freeze  key.Binding
+	SpeedUp key.Binding
+	SpeedDn key.Binding
+	Help    key.Binding
+	Back    key.Binding
 
 	// Navigation
 	Up   key.Binding
@@ -34,9 +36,17 @@ func newKeyMap() keyMap {
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "submit command"),
 		),
-		Pause: key.NewBinding(
+		Freeze: key.NewBinding(
 			key.WithKeys("p"),
-			key.WithHelp("p", "pause / resume"),
+			key.WithHelp("p", "freeze / resume time"),
+		),
+		SpeedUp: key.NewBinding(
+			key.WithKeys("]"),
+			key.WithHelp("]", "speed up"),
+		),
+		SpeedDn: key.NewBinding(
+			key.WithKeys("["),
+			key.WithHelp("[", "slow down"),
 		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
@@ -87,13 +97,13 @@ func newKeyMap() keyMap {
 
 // ShortHelp returns the short help bindings shown at the bottom of the screen.
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Submit, k.Pause, k.Help, k.Back, k.Quit}
+	return []key.Binding{k.Submit, k.Freeze, k.SpeedUp, k.SpeedDn, k.Help, k.Back, k.Quit}
 }
 
 // FullHelp returns the full help bindings grouped by section.
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Submit, k.Pause, k.Help},
+		{k.Submit, k.Freeze, k.SpeedUp, k.SpeedDn, k.Help},
 		{k.Up, k.Down, k.Tab},
 		{k.Back, k.Restart, k.Quit, k.ForceQuit},
 	}

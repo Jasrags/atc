@@ -52,7 +52,7 @@ func (m Model) devHelp() Model {
 	m = m.addRadio(radio.SystemMessage(elapsed, "/clear        — remove all aircraft", radio.Normal))
 	m = m.addRadio(radio.SystemMessage(elapsed, "/god          — toggle god mode", radio.Normal))
 	m = m.addRadio(radio.SystemMessage(elapsed, "/pause        — toggle spawner", radio.Normal))
-	m = m.addRadio(radio.SystemMessage(elapsed, "/speed <1-5>  — set game speed", radio.Normal))
+	m = m.addRadio(radio.SystemMessage(elapsed, "/speed <1-12> — set game speed", radio.Normal))
 	return m
 }
 
@@ -109,14 +109,14 @@ func (m Model) devPause() Model {
 func (m Model) devSpeed(args []string) Model {
 	if len(args) == 0 {
 		m = m.addRadio(radio.SystemMessage(m.stopwatch.Elapsed(),
-			fmt.Sprintf("speed: %dx (usage: /speed <1-5>)", m.speedMultiplier), radio.Normal))
+			fmt.Sprintf("speed: %dx (usage: /speed <1-12>)", m.speedMultiplier), radio.Normal))
 		return m
 	}
 
 	n, err := strconv.Atoi(args[0])
-	if err != nil || n < 1 || n > 5 {
+	if err != nil || n < minSpeed || n > maxSpeed {
 		m = m.addRadio(radio.SystemMessage(m.stopwatch.Elapsed(),
-			"speed must be 1-5", radio.Normal))
+			fmt.Sprintf("speed must be %d-%d", minSpeed, maxSpeed), radio.Normal))
 		return m
 	}
 
@@ -139,8 +139,6 @@ func (m Model) DevStatus() string {
 	if m.spawnerPaused {
 		parts = append(parts, "NOSPAWN")
 	}
-	if m.speedMultiplier != 1 {
-		parts = append(parts, fmt.Sprintf("%dx", m.speedMultiplier))
-	}
+	// Speed is shown in TimeStatus() in the TIME column — don't duplicate here.
 	return "[" + strings.Join(parts, " ") + "]"
 }

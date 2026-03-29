@@ -114,9 +114,9 @@ func TestDevSpeedInvalid(t *testing.T) {
 	if m.speedMultiplier != 1 {
 		t.Error("speed 0 should be rejected")
 	}
-	m = m.processDevCommand("speed 10")
+	m = m.processDevCommand("speed 13")
 	if m.speedMultiplier != 1 {
-		t.Error("speed 10 should be rejected")
+		t.Error("speed 13 should be rejected")
 	}
 }
 
@@ -143,9 +143,8 @@ func TestDevStatusString(t *testing.T) {
 
 	m.godMode = true
 	m.spawnerPaused = true
-	m.speedMultiplier = 3
 	status := m.DevStatus()
-	if status != "[DEV GOD NOSPAWN 3x]" {
-		t.Errorf("expected full status, got %q", status)
+	if status != "[DEV GOD NOSPAWN]" {
+		t.Errorf("expected [DEV GOD NOSPAWN], got %q", status)
 	}
 }

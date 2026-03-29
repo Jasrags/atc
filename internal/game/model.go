@@ -35,7 +35,6 @@ const (
 	screenMenu screen = iota
 	screenPlaying
 	screenHelp
-	screenPaused
 	screenGameOver
 )
 
@@ -48,13 +47,13 @@ const (
 
 // Setup section indices
 const (
-	setupMap       = 0
-	setupRole      = 1
-	setupDiff      = 2
-	setupMode      = 3
-	setupCallsign  = 4
-	setupTrails    = 5
-	setupSections  = 6
+	setupMap      = 0
+	setupRole     = 1
+	setupDiff     = 2
+	setupMode     = 3
+	setupCallsign = 4
+	setupTrails   = 5
+	setupSections = 6
 )
 
 var mainMenuItems = []ui.MenuItem{
@@ -65,38 +64,41 @@ var mainMenuItems = []ui.MenuItem{
 
 // Model is the top-level bubbletea model for the ATC game.
 type Model struct {
-	screen          screen
-	menuScreen      menuScreen
-	menuSelected    int
-	maps            []gamemap.Map
-	gameMap         gamemap.Map
-	gameConfig      config.GameConfig
-	setupFocus      int
-	setupSelections [setupSections]int
-	aircraft        map[string]aircraft.Aircraft
-	runways         []runway.Runway
-	spawner         *aircraft.Spawner
-	input           textinput.Model
-	score           int
-	radioLog        radio.Log
-	width           int
-	height          int
-	stopwatch       stopwatch.Model
-	started         bool
-	keys            keyMap
-	help            help.Model
-	stripViewport      viewport.Model
-	radioViewport      viewport.Model
-	cmdTree            cmdtree.Tree
-	spawnDeparture     bool           // alternates between arrival and departure spawns
-	nearMisses         int            // total separation violations this game
-	activeViolations   map[string]bool // tracks pairs currently in violation (to warn once)
+	screen           screen
+	menuScreen       menuScreen
+	menuSelected     int
+	maps             []gamemap.Map
+	gameMap          gamemap.Map
+	gameConfig       config.GameConfig
+	setupFocus       int
+	setupSelections  [setupSections]int
+	aircraft         map[string]aircraft.Aircraft
+	runways          []runway.Runway
+	spawner          *aircraft.Spawner
+	input            textinput.Model
+	score            int
+	radioLog         radio.Log
+	width            int
+	height           int
+	stopwatch        stopwatch.Model
+	started          bool
+	keys             keyMap
+	help             help.Model
+	stripViewport    viewport.Model
+	radioViewport    viewport.Model
+	cmdTree          cmdtree.Tree
+	spawnDeparture   bool            // alternates between arrival and departure spawns
+	nearMisses       int             // total separation violations this game
+	activeViolations map[string]bool // tracks pairs currently in violation (to warn once)
+
+	// Time control (player-facing)
+	timeFrozen      bool // physics paused, playing screen stays visible
+	speedMultiplier int  // physics ticks per render frame (1x-12x)
 
 	// Developer mode
-	devMode         bool // --dev flag enables / commands
-	godMode         bool // collisions logged but don't end game
-	spawnerPaused   bool // automatic spawning disabled
-	speedMultiplier int  // physics ticks per render frame (1 = normal)
+	devMode       bool // --dev flag enables / commands
+	godMode       bool // collisions logged but don't end game
+	spawnerPaused bool // automatic spawning disabled
 }
 
 // NewModel creates a new model starting at the main menu.
@@ -112,15 +114,15 @@ func NewModel(devMode bool) Model {
 	return Model{
 		screen:          screenMenu,
 		maps:            maps,
-		gameMap:          gm,
-		gameConfig:       cfg,
-		aircraft:         make(map[string]aircraft.Aircraft),
-		runways:          buildRunways(gm),
-		radioLog:         radio.NewLog(),
-		keys:             newKeyMap(),
-		help:             h,
-		devMode:          devMode,
-		speedMultiplier:  1,
+		gameMap:         gm,
+		gameConfig:      cfg,
+		aircraft:        make(map[string]aircraft.Aircraft),
+		runways:         buildRunways(gm),
+		radioLog:        radio.NewLog(),
+		keys:            newKeyMap(),
+		help:            h,
+		devMode:         devMode,
+		speedMultiplier: 1,
 		setupSelections: [setupSections]int{
 			0, // map: first
 			0, // role: TRACON
@@ -192,8 +194,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handlePlayingKey(msg)
 	case screenHelp:
 		return m.handleHelpKey(msg)
-	case screenPaused:
-		return m.handlePausedKey(msg)
 	case screenGameOver:
 		return m.handleGameOverKey(msg)
 	}
@@ -223,6 +223,8 @@ func (m Model) startGame() (Model, tea.Cmd) {
 	m.radioViewport = viewport.New(max(m.width-4, 60), radioViewportHeight)
 	m.nearMisses = 0
 	m.activeViolations = make(map[string]bool)
+	m.timeFrozen = false
+	m.speedMultiplier = 1
 	m.started = true
 
 	return m, tea.Batch(tickCmd(), textinput.Blink, m.stopwatch.Start())
@@ -259,11 +261,6 @@ func (m Model) View() string {
 			lipgloss.Center, lipgloss.Center,
 			ui.HelpBox.Render(helpView))
 
-	case screenPaused:
-		return lipgloss.Place(m.width, m.height,
-			lipgloss.Center, lipgloss.Center,
-			ui.RenderPaused(m.score, m.stopwatch.Elapsed()))
-
 	case screenGameOver:
 		return lipgloss.Place(m.width, m.height,
 			lipgloss.Center, lipgloss.Center,
@@ -279,7 +276,7 @@ func (m Model) View() string {
 func (m Model) renderPlaying() string {
 	planes := m.sortedAircraft()
 
-	hud := ui.RenderHUD(m.score, len(planes), m.stopwatch.Elapsed(), m.gameConfig.Role.String(), m.nearMisses, m.DevStatus())
+	hud := ui.RenderHUD(m.score, len(planes), m.stopwatch.Elapsed(), m.gameConfig.Role.String(), m.nearMisses, m.TimeStatus(), m.DevStatus())
 	// Build set of callsigns currently in violation for radar highlighting
 	violating := make(map[string]bool)
 	for pair := range m.activeViolations {
@@ -305,6 +302,20 @@ func (m Model) renderPlaying() string {
 	}
 
 	return zone.Scan(lipgloss.JoinVertical(lipgloss.Left, hud, gameArea, radioPanel, inputView))
+}
+
+// TimeStatus returns a short status string for the HUD showing speed and freeze state.
+func (m Model) TimeStatus() string {
+	if m.timeFrozen {
+		if m.speedMultiplier != 1 {
+			return fmt.Sprintf("PAUSED %dx", m.speedMultiplier)
+		}
+		return "PAUSED"
+	}
+	if m.speedMultiplier != 1 {
+		return fmt.Sprintf("%dx", m.speedMultiplier)
+	}
+	return ""
 }
 
 func (m Model) addRadio(msg radio.Message) Model {

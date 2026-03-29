@@ -38,16 +38,19 @@ func (m Model) handlePlayingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Single-char shortcuts (p, ?) only activate when the input is empty.
+	// Single-char shortcuts only activate when the input is empty.
 	// Otherwise they'd swallow letters the user is typing into the ATC prompt.
 	if m.input.Value() == "" {
 		switch {
 		case key.Matches(msg, m.keys.Help):
 			m.screen = screenHelp
 			return m, nil
-		case key.Matches(msg, m.keys.Pause):
-			m.screen = screenPaused
-			return m, m.stopwatch.Stop()
+		case key.Matches(msg, m.keys.Freeze):
+			return m.toggleFreeze()
+		case key.Matches(msg, m.keys.SpeedUp):
+			return m.changeSpeed(1), nil
+		case key.Matches(msg, m.keys.SpeedDn):
+			return m.changeSpeed(-1), nil
 		}
 	}
 
@@ -142,6 +145,35 @@ func (m Model) processCommand(input string) Model {
 
 	m.aircraft = newPlanes
 	m = m.addRadio(radio.CommandPhraseology(elapsed, cmd.Callsign, changes))
+	return m
+}
+
+// --- Time Control ---
+
+const (
+	minSpeed = 1
+	maxSpeed = 12
+)
+
+// toggleFreeze pauses or resumes the physics simulation while keeping the
+// playing screen visible. The player can still type and submit commands.
+func (m Model) toggleFreeze() (tea.Model, tea.Cmd) {
+	m.timeFrozen = !m.timeFrozen
+	if m.timeFrozen {
+		return m, m.stopwatch.Stop()
+	}
+	return m, tea.Batch(tickCmd(), m.stopwatch.Start())
+}
+
+// changeSpeed adjusts the speed multiplier by delta, clamping to [1, 12].
+func (m Model) changeSpeed(delta int) Model {
+	m.speedMultiplier += delta
+	if m.speedMultiplier < minSpeed {
+		m.speedMultiplier = minSpeed
+	}
+	if m.speedMultiplier > maxSpeed {
+		m.speedMultiplier = maxSpeed
+	}
 	return m
 }
 
