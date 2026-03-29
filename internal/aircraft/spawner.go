@@ -111,7 +111,10 @@ func (s *Spawner) Spawn(width, height int) Aircraft {
 
 // SpawnDeparture creates a new departure aircraft at a random gate.
 // Returns the aircraft and true if a gate is available, or a zero aircraft and false if not.
-func (s *Spawner) SpawnDeparture(gates []struct{ ID string; X, Y int }) (Aircraft, bool) {
+func (s *Spawner) SpawnDeparture(gates []struct {
+	ID   string
+	X, Y int
+}) (Aircraft, bool) {
 	if len(gates) == 0 {
 		return Aircraft{}, false
 	}
@@ -120,6 +123,59 @@ func (s *Spawner) SpawnDeparture(gates []struct{ ID string; X, Y int }) (Aircraf
 	ac := NewDeparture(callsign, gate.X, gate.Y, gate.ID)
 	ac.TrailEnabled = s.cfg.PlaneTrails
 	return ac, true
+}
+
+// SpawnFinalApproach creates an arrival aircraft pre-sequenced on final approach.
+// The aircraft is placed ~approachDist cells back from the runway, aligned with
+// the runway heading, at low altitude, already cleared to land.
+func (s *Spawner) SpawnFinalApproach(rwX, rwY, rwHeading, mapWidth, mapHeight int) Aircraft {
+	callsign := s.generateCallsign()
+
+	// Place aircraft upstream of the runway along the approach course.
+	// "Upstream" = opposite of runway heading.
+	approachDist := 50.0
+	maxDist := float64(mapWidth) / 2
+	if approachDist > maxDist {
+		approachDist = maxDist
+	}
+
+	// Approach heading is the opposite of runway heading — the aircraft flies
+	// toward the runway, so its heading equals the runway heading, but its
+	// spawn position is offset in the opposite direction.
+	rad := float64(rwHeading) * math.Pi / 180.0
+	spawnX := float64(rwX) - approachDist*math.Sin(rad)
+	spawnY := float64(rwY) + approachDist*math.Cos(rad)
+
+	// Clamp to map bounds with a small margin
+	spawnX = math.Max(1, math.Min(spawnX, float64(mapWidth-2)))
+	spawnY = math.Max(1, math.Min(spawnY, float64(mapHeight-2)))
+
+	ac := Aircraft{
+		Callsign:              callsign,
+		X:                     spawnX,
+		Y:                     spawnY,
+		Heading:               rwHeading,
+		TargetHeading:         rwHeading,
+		Altitude:              3,
+		TargetAltitude:        1,
+		Speed:                 2,
+		TargetSpeed:           2,
+		State:                 Landing,
+		AssignedLandingRunway: fmt.Sprintf("%d", runwayNumber(rwHeading)),
+		TrailEnabled:          s.cfg.PlaneTrails,
+		PatienceMax:           0, // no patience — already cleared to land
+	}
+	return ac
+}
+
+// runwayNumber converts a heading to a runway number (heading/10, with 0 → 36).
+// Mirrors gamemap.RunwayNumber to avoid a cross-package dependency.
+func runwayNumber(heading int) int {
+	n := (heading + 5) / 10
+	if n == 0 {
+		n = 36
+	}
+	return n
 }
 
 func (s *Spawner) generateCallsign() string {

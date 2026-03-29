@@ -79,13 +79,19 @@ func (r Role) String() string {
 	}
 }
 
+var (
+	groundCmds       = map[string]bool{"PB": true, "TX": true, "HS": true, "CR": true, "GATE": true, "T": true}
+	towerBlockedCmds = map[string]bool{"D": true, "TL": true, "TR": true, "EX": true}
+)
+
 // IsCommandAllowed reports whether the given command keyword is permitted for this role.
 func (r Role) IsCommandAllowed(cmd string) bool {
-	groundCmds := map[string]bool{"PB": true, "TX": true, "HS": true, "CR": true, "GATE": true, "T": true}
 	switch r {
 	case RoleTRACON:
 		return !groundCmds[cmd]
-	case RoleTower, RoleCombined:
+	case RoleTower:
+		return !towerBlockedCmds[cmd]
+	case RoleCombined:
 		return true
 	}
 	return true
@@ -149,15 +155,14 @@ func DefaultConfig() GameConfig {
 }
 
 // RoleOptions returns the display labels for available role selections.
-// Tower mode is not yet implemented — it will be added when Tower automation is built.
 func RoleOptions() []string {
-	return []string{"TRACON", "Combined"}
+	return []string{"TRACON", "Tower", "Combined"}
 }
 
 // RoleFromIndex converts a setup screen selection index to a Role.
 // This is needed because the options list may not match the iota order.
 func RoleFromIndex(idx int) Role {
-	roles := []Role{RoleTRACON, RoleCombined}
+	roles := []Role{RoleTRACON, RoleTower, RoleCombined}
 	if idx >= 0 && idx < len(roles) {
 		return roles[idx]
 	}

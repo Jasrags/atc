@@ -150,6 +150,76 @@ func TestDifficultyMaxAircraft(t *testing.T) {
 	}
 }
 
+func TestSpawnFinalApproach(t *testing.T) {
+	spawner := defaultSpawner(42)
+
+	tests := []struct {
+		name       string
+		rwX, rwY   int
+		rwHeading  int
+		mapW, mapH int
+	}{
+		{"heading 270 (SAN)", 85, 40, 270, 120, 50},
+		{"heading 90 (opposite)", 35, 40, 90, 120, 50},
+		{"heading 180 (south)", 60, 25, 180, 120, 50},
+		{"small map", 45, 20, 270, 90, 40},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ac := spawner.SpawnFinalApproach(tt.rwX, tt.rwY, tt.rwHeading, tt.mapW, tt.mapH)
+
+			// Should be in Landing state, pre-cleared
+			if ac.State != Landing {
+				t.Errorf("state = %v, want Landing", ac.State)
+			}
+
+			// Heading should match runway
+			if ac.Heading != tt.rwHeading {
+				t.Errorf("heading = %d, want %d", ac.Heading, tt.rwHeading)
+			}
+
+			// Altitude should be 3 (approach altitude)
+			if ac.Altitude != 3 {
+				t.Errorf("altitude = %d, want 3", ac.Altitude)
+			}
+
+			// Target altitude should be 1 (descending)
+			if ac.TargetAltitude != 1 {
+				t.Errorf("target altitude = %d, want 1", ac.TargetAltitude)
+			}
+
+			// Speed should be 2 (approach speed)
+			if ac.Speed != 2 {
+				t.Errorf("speed = %d, want 2", ac.Speed)
+			}
+
+			// Should have assigned landing runway
+			if ac.AssignedLandingRunway == "" {
+				t.Error("expected assigned landing runway")
+			}
+
+			// No patience (already cleared)
+			if ac.PatienceMax != 0 {
+				t.Errorf("patience = %d, want 0", ac.PatienceMax)
+			}
+
+			// Should be within map bounds
+			if ac.X < 1 || ac.X > float64(tt.mapW-2) {
+				t.Errorf("X = %.1f, out of bounds [1, %d]", ac.X, tt.mapW-2)
+			}
+			if ac.Y < 1 || ac.Y > float64(tt.mapH-2) {
+				t.Errorf("Y = %.1f, out of bounds [1, %d]", ac.Y, tt.mapH-2)
+			}
+
+			// Should be upstream of the runway (not at the runway position)
+			if ac.X == float64(tt.rwX) && ac.Y == float64(tt.rwY) {
+				t.Error("aircraft spawned at runway position, should be upstream")
+			}
+		})
+	}
+}
+
 func TestPlaneTrailsPassedToAircraft(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PlaneTrails = true

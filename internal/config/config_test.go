@@ -91,6 +91,79 @@ func TestGameModeString(t *testing.T) {
 	}
 }
 
+func TestRoleFromIndex(t *testing.T) {
+	tests := []struct {
+		idx  int
+		want Role
+	}{
+		{0, RoleTRACON},
+		{1, RoleTower},
+		{2, RoleCombined},
+		{-1, RoleTRACON}, // out of bounds
+		{99, RoleTRACON}, // out of bounds
+	}
+	for _, tt := range tests {
+		got := RoleFromIndex(tt.idx)
+		if got != tt.want {
+			t.Errorf("RoleFromIndex(%d) = %v, want %v", tt.idx, got, tt.want)
+		}
+	}
+}
+
+func TestRoleOptions(t *testing.T) {
+	opts := RoleOptions()
+	if len(opts) != 3 {
+		t.Fatalf("expected 3 role options, got %d", len(opts))
+	}
+	if opts[0] != "TRACON" || opts[1] != "Tower" || opts[2] != "Combined" {
+		t.Errorf("unexpected role options: %v", opts)
+	}
+}
+
+func TestIsCommandAllowed(t *testing.T) {
+	tests := []struct {
+		name string
+		role Role
+		cmd  string
+		want bool
+	}{
+		// TRACON blocks ground commands
+		{"tracon blocks PB", RoleTRACON, "PB", false},
+		{"tracon blocks TX", RoleTRACON, "TX", false},
+		{"tracon blocks T", RoleTRACON, "T", false},
+		{"tracon allows H", RoleTRACON, "H", true},
+		{"tracon allows D", RoleTRACON, "D", true},
+		{"tracon allows TL", RoleTRACON, "TL", true},
+
+		// Tower blocks TRACON-specific commands
+		{"tower blocks D", RoleTower, "D", false},
+		{"tower blocks TL", RoleTower, "TL", false},
+		{"tower blocks TR", RoleTower, "TR", false},
+		{"tower blocks EX", RoleTower, "EX", false},
+		{"tower allows H", RoleTower, "H", true},
+		{"tower allows A", RoleTower, "A", true},
+		{"tower allows S", RoleTower, "S", true},
+		{"tower allows L", RoleTower, "L", true},
+		{"tower allows PB", RoleTower, "PB", true},
+		{"tower allows TX", RoleTower, "TX", true},
+		{"tower allows T", RoleTower, "T", true},
+		{"tower allows GA", RoleTower, "GA", true},
+
+		// Combined allows everything
+		{"combined allows D", RoleCombined, "D", true},
+		{"combined allows PB", RoleCombined, "PB", true},
+		{"combined allows TL", RoleCombined, "TL", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.role.IsCommandAllowed(tt.cmd)
+			if got != tt.want {
+				t.Errorf("%s.IsCommandAllowed(%q) = %v, want %v", tt.role, tt.cmd, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestOptionLists(t *testing.T) {
 	if len(DifficultyOptions()) != 3 {
 		t.Errorf("expected 3 difficulty options, got %d", len(DifficultyOptions()))

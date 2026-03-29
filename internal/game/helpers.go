@@ -22,12 +22,18 @@ func (m Model) trySpawnDeparture(elapsed time.Duration) Model {
 		}
 	}
 
-	var available []struct{ ID string; X, Y int }
+	var available []struct {
+		ID   string
+		X, Y int
+	}
 	for _, g := range m.gameMap.Gates {
 		if !occupiedGates[g.ID] {
 			node := m.gameMap.NodeByID(g.NodeID)
 			if node != nil {
-				available = append(available, struct{ ID string; X, Y int }{g.ID, node.X, node.Y})
+				available = append(available, struct {
+					ID   string
+					X, Y int
+				}{g.ID, node.X, node.Y})
 			}
 		}
 	}
@@ -136,6 +142,34 @@ func (m Model) nodeIDsToPositions(nodeIDs []string) [][2]int {
 		}
 	}
 	return positions
+}
+
+// spawnArrival spawns a new arrival aircraft. In Tower mode, arrivals appear on
+// final approach aligned with a runway. In other modes, they spawn at radar edges.
+func (m Model) spawnArrival(elapsed time.Duration) Model {
+	if m.gameConfig.Role == config.RoleTower {
+		return m.spawnTowerArrival(elapsed)
+	}
+	ac := m.spawner.Spawn(m.gameMap.Width, m.gameMap.Height)
+	if _, exists := m.aircraft[ac.Callsign]; !exists {
+		m.aircraft[ac.Callsign] = ac
+		m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
+			radio.FormatEnteringAirspace(ac.Callsign, ac.Heading, ac.Altitude)))
+	}
+	return m
+}
+
+// spawnTowerArrival creates an arrival pre-sequenced on final approach for Tower mode.
+func (m Model) spawnTowerArrival(elapsed time.Duration) Model {
+	rw := m.gameMap.PrimaryRunway()
+	ac := m.spawner.SpawnFinalApproach(rw.X, rw.Y, rw.Heading, m.gameMap.Width, m.gameMap.Height)
+	if _, exists := m.aircraft[ac.Callsign]; !exists {
+		m.aircraft[ac.Callsign] = ac
+		rwNum := fmt.Sprintf("%d", gamemap.RunwayNumber(rw.Heading))
+		m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
+			fmt.Sprintf("tower, %s on final runway %s", ac.Callsign, rwNum)))
+	}
+	return m
 }
 
 func (m Model) sortedAircraft() []aircraft.Aircraft {

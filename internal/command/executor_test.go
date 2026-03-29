@@ -414,6 +414,64 @@ func TestExecuteExpedite(t *testing.T) {
 	}
 }
 
+func TestTowerRejectsTRACONCommands(t *testing.T) {
+	planes := makePlanes()
+	h := 180
+
+	tests := []struct {
+		name string
+		cmd  Command
+	}{
+		{"direct fix", Command{Callsign: "AA123", DirectFix: "MAFAN"}},
+		{"turn left", Command{Callsign: "AA123", TurnLeft: &h}},
+		{"turn right", Command{Callsign: "AA123", TurnRight: &h}},
+		{"expedite", Command{Callsign: "AA123", Expedite: true}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := Execute(tt.cmd, planes, config.RoleTower)
+			if err == nil {
+				t.Errorf("expected Tower to reject %s command", tt.name)
+			}
+		})
+	}
+}
+
+func TestTowerAllowsBasicAndGroundCommands(t *testing.T) {
+	planes := makePlanes()
+
+	// Heading command should work for airborne aircraft in Tower mode
+	h := 270
+	_, _, err := Execute(Command{Callsign: "AA123", Heading: &h}, planes, config.RoleTower)
+	if err != nil {
+		t.Errorf("Tower should allow heading: %v", err)
+	}
+
+	// Altitude command should work
+	a := 3
+	_, _, err = Execute(Command{Callsign: "AA123", Altitude: &a}, planes, config.RoleTower)
+	if err != nil {
+		t.Errorf("Tower should allow altitude: %v", err)
+	}
+
+	// Land command should work
+	_, _, err = Execute(Command{Callsign: "AA123", ClearToLand: true}, planes, config.RoleTower)
+	if err != nil {
+		t.Errorf("Tower should allow land: %v", err)
+	}
+
+	// Ground commands should work
+	gatePlanes := makePlanes()
+	ac := gatePlanes["AA123"]
+	ac.State = aircraft.AtGate
+	gatePlanes["AA123"] = ac
+	_, _, err = Execute(Command{Callsign: "AA123", PushbackApproved: true}, gatePlanes, config.RoleTower)
+	if err != nil {
+		t.Errorf("Tower should allow pushback: %v", err)
+	}
+}
+
 func TestExecuteLandWithRunway(t *testing.T) {
 	planes := makePlanes()
 	cmd := Command{Callsign: "AA123", ClearToLand: true, LandRunway: "28R"}

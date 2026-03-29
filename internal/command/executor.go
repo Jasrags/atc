@@ -219,6 +219,20 @@ func checkRolePermissions(cmd Command, role config.Role) error {
 			return fmt.Errorf("gate commands not available in TRACON mode")
 		}
 	}
+	if role == config.RoleTower {
+		if cmd.DirectFix != "" {
+			return fmt.Errorf("direct-to-fix not available in Tower mode")
+		}
+		if cmd.TurnLeft != nil {
+			return fmt.Errorf("turn left not available in Tower mode")
+		}
+		if cmd.TurnRight != nil {
+			return fmt.Errorf("turn right not available in Tower mode")
+		}
+		if cmd.Expedite {
+			return fmt.Errorf("expedite not available in Tower mode")
+		}
+	}
 	return nil
 }
 

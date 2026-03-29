@@ -305,10 +305,10 @@ func chainOptions(state aircraft.State, tokens []string, role config.Role) []Opt
 
 // filterByRole removes options that the current role doesn't allow.
 func filterByRole(options []Option, role config.Role) []Option {
-	if role == config.RoleCombined || role == config.RoleTower {
+	if role == config.RoleCombined {
 		return options
 	}
-	// TRACON: filter out ground commands
+	// TRACON: filter out ground commands. Tower: filter out D, TL, TR, EX.
 	var filtered []Option
 	for _, opt := range options {
 		if role.IsCommandAllowed(opt.Value) || opt.IsSubmit {

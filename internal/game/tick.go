@@ -128,6 +128,23 @@ func (m Model) tickAutoGroundDeparture(ac aircraft.Aircraft) (aircraft.Aircraft,
 	return ac, tickEffect{}
 }
 
+// tickTowerAutoHandoff removes departing aircraft at altitude >= 3 in Tower mode,
+// scoring +1 for a successful handoff to TRACON.
+func (m Model) tickTowerAutoHandoff(ac aircraft.Aircraft, elapsed time.Duration) (aircraft.Aircraft, tickEffect) {
+	if m.gameConfig.Role != config.RoleTower {
+		return ac, tickEffect{}
+	}
+	if ac.State != aircraft.Departing || ac.Altitude < 3 {
+		return ac, tickEffect{}
+	}
+	return ac, tickEffect{
+		scoreDelta: 1,
+		messages: []radio.Message{radio.PilotMessage(elapsed, ac.Callsign,
+			fmt.Sprintf("%s contact departure, good day", ac.Callsign))},
+		remove: true,
+	}
+}
+
 // tickPatience advances the patience timer for airborne aircraft and generates
 // nag messages or removal when patience expires.
 func (m Model) tickPatience(ac aircraft.Aircraft, elapsed time.Duration) (aircraft.Aircraft, tickEffect) {
@@ -190,12 +207,7 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 		if m.spawnDeparture && len(m.gameMap.Gates) > 0 {
 			m = m.trySpawnDeparture(elapsed)
 		} else {
-			ac := m.spawner.Spawn(m.gameMap.Width, m.gameMap.Height)
-			if _, exists := m.aircraft[ac.Callsign]; !exists {
-				m.aircraft[ac.Callsign] = ac
-				m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
-					radio.FormatEnteringAirspace(ac.Callsign, ac.Heading, ac.Altitude)))
-			}
+			m = m.spawnArrival(elapsed)
 		}
 		if len(m.aircraft) > countBefore {
 			m.spawnDeparture = !m.spawnDeparture
@@ -230,9 +242,13 @@ func (m Model) tickPhysics(elapsed time.Duration) Model {
 		default:
 			next = ac.Tick()
 		}
-		// Departing aircraft that leave airspace = successful departure
+		// Departing aircraft that leave airspace = successful departure.
+		// In Tower mode, departures are handed off at altitude 3 (tickTowerAutoHandoff),
+		// so they should not reach the edge — but handle it gracefully if they do.
 		if next.State == aircraft.Departing && next.IsOffScreen(m.gameMap.Width, m.gameMap.Height) {
-			m.score++
+			if m.gameConfig.Role != config.RoleTower {
+				m.score++
+			}
 			m = m.addRadio(radio.PilotMessage(elapsed, next.Callsign,
 				fmt.Sprintf("%s leaving airspace, good day", next.Callsign)))
 			continue
@@ -302,6 +318,9 @@ func (m Model) tickPhysics(elapsed time.Duration) Model {
 		combined = combined.merge(fx)
 
 		ac, fx = m.tickAutoGroundDeparture(ac)
+		combined = combined.merge(fx)
+
+		ac, fx = m.tickTowerAutoHandoff(ac, elapsed)
 		combined = combined.merge(fx)
 
 		ac, fx = m.tickPatience(ac, elapsed)
