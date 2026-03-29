@@ -22,7 +22,7 @@ const (
 type Option struct {
 	Label    string // Display text (e.g., "H", "270", "Enter")
 	Value    string // What gets appended to input (e.g., "H", "270", "")
-	ZoneID   string // Unique bubblezone ID
+	ZoneID   string // Unique ID for click detection
 	IsSubmit bool   // True for the "Send" / Enter option
 }
 
