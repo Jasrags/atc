@@ -2,9 +2,164 @@
 
 Feature priorities for closing the gap with Tower!3D Pro and IATC4. Each feature is tracked here with status, and broken into implementation tasks when work begins.
 
+---
+
+## Priority 0: Ebitengine Migration
+
+**Status: Not Started**
+
+Migrate from charmbracelet/bubbletea (terminal UI) to Ebitengine (2D game engine) for proper graphical rendering. The TUI cannot provide the visual fidelity needed for Tower mode surface operations, zoom/pan, or future features like weather overlays and radar scopes.
+
+### Why Migrate
+
+- ASCII radar is too coarse for Tower ground ops — callsigns overlap, airport surface is tiny
+- No zoom/pan capability in terminal rendering
+- Limited to monospace character grid — no smooth movement, no real coordinates
+- Mouse interaction limited to bubblezone hacks
+- Cannot render radar scope sweeps, weather, altitude tags properly
+
+### Architecture Preservation
+
+The game logic is cleanly separated from the presentation layer. **~70% of the codebase ports unchanged:**
+
+| Package | Lines | Changes |
+|---------|-------|---------|
+| `aircraft/` | 634 | **None** — Tick(), GroundTick(), state machine, spawner |
+| `command/` | 469 | **None** — parser, executor |
+| `collision/` | 107 | **None** — separation/collision detection |
+| `config/` | 190 | **None** — GameConfig, roles, difficulty |
+| `gamemap/` | 487 | **None** — map definitions, taxiway graph, pathfinding |
+| `heading/` | 17 | **None** — heading math |
+| `runway/` | 60 | **None** — landing validation |
+| `radio/` | 297 | **None** — RadioMessage, Log, phraseology |
+| `game/` | 1550 | **Rewrite glue** — Replace bubbletea Model with Ebitengine Game. Tick pipeline, command processing, spawning logic preserved. |
+| `radar/` | 429 | **Replace** — ASCII grid → Ebitengine draw calls |
+| `ui/` | 371 | **Replace** — lipgloss styles → ebitenui widgets |
+| `cmdtree/` | 361 | **Adapt** — State machine stays, rendering becomes ebitenui buttons |
+
+### Tech Stack
+
+- **Engine**: [Ebitengine](https://ebitengine.org) v2.9+ (pure Go, Update/Draw loop matches existing Update/View)
+- **UI Widgets**: [ebitenui](https://github.com/ebitenui/ebitenui) (text input, scrollable containers, buttons, layout)
+- **Text**: Ebitengine `text/v2` with glyph caching for callsign labels + [etxt](https://github.com/tinne26/etxt) if needed
+- **Fonts**: Monospace TTF for radar labels (JetBrains Mono, IBM Plex Mono, or similar)
+
+### Phase 1: Engine Scaffold & Window
+
+**Goal**: Ebitengine window opens, renders a static radar background with runway. Proves the engine works and establishes the project structure.
+
+- [ ] Add Ebitengine dependency (`go get github.com/hajimehoshi/ebiten/v2`)
+- [ ] New `internal/engine/` package with `Game` struct implementing `ebiten.Game` interface
+- [ ] `Update()` stub — handles quit key (Esc/Ctrl+C)
+- [ ] `Draw()` renders: dark background, radar grid dots, runway as a thick line, map border
+- [ ] `Layout()` returns window size (resizable)
+- [ ] New `main.go` entry point (or `--gui` flag alongside existing TUI)
+- [ ] Render one static aircraft symbol (`@`) with callsign text label at a fixed position
+- [ ] Load a monospace TTF font, configure `text/v2` face
+
+### Phase 2: Aircraft Rendering & Movement
+
+**Goal**: Aircraft move on screen in real-time. Core visual loop working.
+
+- [ ] Wire existing `aircraft.Tick()` / `GroundTick()` into `Game.Update()` at 10 TPS
+- [ ] Draw aircraft symbols as colored glyphs: `@` (airborne), `v` (taxi), `#` (gate), `!` (hold), `>` (runway)
+- [ ] Draw callsign label offset from aircraft position
+- [ ] Draw altitude/speed data tag near each aircraft (e.g., "AA123 ↑05 S3")
+- [ ] Draw heading indicator line (short line extending from aircraft in heading direction)
+- [ ] Draw trail dots for aircraft with trails enabled
+- [ ] Draw nav fixes (waypoint/VOR/airport symbols + labels)
+- [ ] Draw taxiway lines, gate markers, hold-short markers
+- [ ] Separation violation highlighting (blinking red on violating aircraft)
+- [ ] Color-code by state: green (approach), yellow (landing), cyan (ground), red (crashed)
+
+### Phase 3: Camera & Viewport
+
+**Goal**: Zoom and pan. This solves the Tower mode surface problem that triggered the migration.
+
+- [ ] Camera struct: position (centerX, centerY), zoom level (1.0 = full map fits window)
+- [ ] Mouse scroll wheel zooms in/out (0.5x to 8x range)
+- [ ] Click-and-drag pans the camera
+- [ ] Keyboard shortcuts: `+`/`-` zoom, arrow keys pan, `Home` reset to fit-all
+- [ ] Tower mode: camera auto-centers on airport surface bounding box at ~3x zoom
+- [ ] TRACON/Combined mode: camera fits full radar (zoom 1.0)
+- [ ] World-to-screen and screen-to-world coordinate transforms
+- [ ] Aircraft click detection uses world coordinates (zoom-independent)
+
+### Phase 4: Command Input & Game Loop
+
+**Goal**: Game is playable. Player can type commands and interact with aircraft.
+
+- [ ] ebitenui TextInput widget for ATC command prompt (bottom of screen)
+- [ ] Wire Enter key → existing `command.Parse()` + `command.Execute()` pipeline
+- [ ] Wire command results to radio log
+- [ ] Existing tick pipeline: spawning, physics, collision, separation, patience — all wired
+- [ ] Time freeze (`p` key) and speed control (`[`/`]`) working
+- [ ] Game state machine: Menu → Playing → GameOver (screen enum, same as current)
+- [ ] Developer mode (`/` commands) working
+
+### Phase 5: UI Panels (ebitenui)
+
+**Goal**: Full HUD with all information panels. Feature parity with TUI version.
+
+- [ ] Layout: radar viewport (main), flight strips (right sidebar), radio log (bottom), HUD (top bar), command input (bottom)
+- [ ] HUD bar: score, aircraft count, elapsed time, role, speed/freeze status, near misses
+- [ ] Flight strip sidebar: scrollable list of aircraft strips (callsign, state, heading/alt/speed, targets)
+- [ ] Flight strip click → populates command input with callsign
+- [ ] Radio log: scrollable message list with colored timestamps and direction indicators
+- [ ] Command tree: clickable command options below input (H/A/S/L etc.) — reuse `cmdtree.Resolve()` state machine
+- [ ] Setup screen: map/role/difficulty/callsign/trails selection (ebitenui widgets)
+- [ ] Main menu: New Game, Help, Quit
+- [ ] Help overlay: command reference
+- [ ] Game over overlay: score + restart option
+
+### Phase 6: Visual Polish
+
+**Goal**: The game looks and feels like a radar scope, not an ASCII art project.
+
+- [ ] Radar scope aesthetic: dark green/black background, bright green blips (classic ATC scope feel)
+- [ ] Runway rendered as thick rectangle with threshold markings and runway numbers
+- [ ] Taxiways rendered as thinner lines with taxiway letter labels at intersections
+- [ ] Gates rendered as small rectangles with gate ID labels
+- [ ] Aircraft data blocks: leader line from symbol to data tag (callsign + alt + speed)
+- [ ] Smooth aircraft position interpolation (sub-tick rendering for fluid movement)
+- [ ] Blinking effects: separation warnings, patience urgency, cleared-to-land
+- [ ] Hold-short bars rendered as dashed lines across taxiway
+- [ ] Compass rose or heading scale around radar border
+- [ ] Minimap (when zoomed in) showing full radar with current viewport rectangle
+
+### Phase 7: Remove TUI & Cleanup
+
+**Goal**: Single rendering path. Remove bubbletea dependency.
+
+- [ ] Remove bubbletea, bubbles, lipgloss, bubblezone dependencies
+- [ ] Remove `internal/ui/` (lipgloss styles)
+- [ ] Remove `internal/radar/renderer.go` (ASCII grid)
+- [ ] Remove `internal/cmdtree/renderer.go` (ASCII button rendering)
+- [ ] Update `main.go` to launch Ebitengine directly (no `--gui` flag)
+- [ ] Update CLAUDE.md project structure documentation
+- [ ] Update Makefile targets
+- [ ] Update all tests that depend on bubbletea message types
+
+### Migration Strategy
+
+- **Parallel development**: Keep TUI working while building the Ebitengine version. Use a `--gui` flag or separate binary during migration.
+- **Phase 1-4 = MVP**: Playable game with graphical rendering. Ship this before adding polish.
+- **Phase 5 = Feature parity**: All TUI features work in the graphical version.
+- **Phase 6 = The payoff**: Visual quality that was never possible in a terminal.
+- **Phase 7 = Cleanup**: Remove old code only after the new version is fully validated.
+
+### Risk Mitigation
+
+- **ebitenui learning curve**: Phase 5 is the highest-effort phase. Build a standalone ebitenui prototype of the radio log + command input first to learn the widget system before integrating.
+- **Text rendering performance**: Many dynamic callsign labels updating each frame. Use `text/v2` glyph caching and only redraw changed labels. Profile early in Phase 2.
+- **Click detection with zoom**: Phase 3's coordinate transforms must be correct before Phase 4's aircraft click detection. Test with unit tests on world↔screen transforms.
+- **Test coverage**: Game logic tests (`aircraft/`, `command/`, `collision/`, etc.) continue passing throughout migration since those packages don't change. Only `game/` and rendering tests need rewriting.
+
+---
+
 ## Priority 1: Controller Role System
 
-**Status: TRACON Implemented, Tower Not Started**
+**Status: TRACON Implemented, Tower Phases 1-4 Complete**
 
 The player selects a role at game start that defines their scope of responsibility, available commands, visible UI panels, and what the game automates. Each role plays like a different game. See `atc-flight-strips.md` for the full design reference.
 
@@ -43,13 +198,14 @@ Tower is focused on the physical runway environment. TRACON delivers arrivals on
 | **Game over** | Runway incursion, collision, or missed approach overflow. |
 
 Implementation:
-- [ ] Tower auto-approach: arrivals spawn pre-sequenced on ~5nm final, low altitude, descending
-- [ ] Tower auto-departure handoff: departing aircraft auto-handoff at altitude 3+
-- [ ] Tower zoomed view: airport surface fills radar, approach corridor as inset
+- [x] Tower auto-approach: arrivals spawn pre-sequenced on ~5nm final, low altitude, descending
+- [x] Tower auto-departure handoff: departing aircraft auto-handoff at altitude 3+
+- [x] Tower command filtering: D, TL, TR, EX blocked; H/A/S/L/GA + ground commands allowed
+- [x] Add Tower to selectable role options
+- [ ] Tower zoomed view: airport surface fills radar, approach corridor as inset *(deferred to Ebitengine migration Phase 3)*
 - [ ] Runway occupancy enforcement: only one operation per runway at a time
 - [ ] Runway incursion = game over
 - [ ] Split flight strip panels: arrivals / departures
-- [ ] Add Tower to selectable role options (currently gated)
 
 ### Future Roles
 
@@ -390,6 +546,8 @@ See [`docs/atc-flight-strips.md`](docs/atc-flight-strips.md) for the full design
 - [x] Separation rules (3-cell lateral, 1-alt vertical, -50/tick penalty, near-miss tracking)
 - [x] Expanded commands: D (direct to fix), TL/TR (forced turn), EX (expedite), L <runway>
 - [x] Pilot patience system (30s timer, nag escalation, aircraft leaves on timeout, visual indicators)
+- [x] Tower mode: role selection, final approach spawning, auto-departure handoff, command filtering
+- [x] Time freeze (p key) and player-facing speed control ([ ] keys, 1x-12x)
 
 ---
 
