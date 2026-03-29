@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(go fmt:*)",
+      "Bash(go mod:*)",
+      "Bash(go get:*)",
+      "Bash(go list:*)",
+      "Bash(go tool:*)",
+      "Bash(gofmt:*)",
+      "Bash(goimports:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git status:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git diff)",
+      "Bash(git log:*)",
+      "Bash(git remote:*)",
+      "Bash(git branch:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(sed:*)",
+      "Bash(gh:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | { read -r f; [[ \"$f\" == *.go ]] && gofmt -w \"$f\" || true; } 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Running gofmt..."
+          }
+        ]
+      }
+    ]
+  }
+}
