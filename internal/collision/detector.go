@@ -78,9 +78,14 @@ func CheckSeparation(planes map[string]aircraft.Aircraft) []Violation {
 			}
 
 			if dist < float64(SeparationMinLateral) && altDiff < SeparationMinVertical {
+				// Canonicalize pair order so keys are stable across map iterations
+				cs1, cs2 := a.Callsign, b.Callsign
+				if cs1 > cs2 {
+					cs1, cs2 = cs2, cs1
+				}
 				violations = append(violations, Violation{
-					Callsign1: a.Callsign,
-					Callsign2: b.Callsign,
+					Callsign1: cs1,
+					Callsign2: cs2,
 					Distance:  dist,
 					AltDiff:   altDiff,
 				})

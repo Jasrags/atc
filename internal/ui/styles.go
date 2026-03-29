@@ -25,7 +25,7 @@ var (
 			Bold(true)
 
 	AircraftWarning = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
+			Foreground(lipgloss.Color("214")).
 			Bold(true).
 			Blink(true)
 

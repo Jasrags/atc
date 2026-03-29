@@ -612,18 +612,17 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Check separation violations
+	// Check separation violations.
+	// NOTE: This must run after collision.Check which returns early on game over.
+	// If Check finds a collision, we never reach this code — separation penalties
+	// should not apply to aircraft that are simultaneously colliding.
 	violations := collision.CheckSeparation(m.aircraft)
 	currentPairs := make(map[string]bool)
 	for _, v := range violations {
 		pairKey := v.Callsign1 + ":" + v.Callsign2
 		currentPairs[pairKey] = true
 
-		// Penalty per tick
 		m.score -= collision.ViolationPenalty
-		if m.score < 0 {
-			m.score = 0
-		}
 
 		// Warn once when violation starts
 		if !m.activeViolations[pairKey] {
@@ -632,6 +631,9 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 				fmt.Sprintf("TRAFFIC ALERT: %s and %s — loss of separation (%.1f cells)",
 					v.Callsign1, v.Callsign2, v.Distance), radio.Urgent))
 		}
+	}
+	if m.score < 0 {
+		m.score = 0
 	}
 	m.activeViolations = currentPairs
 
