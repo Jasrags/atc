@@ -390,6 +390,12 @@ func (m Model) processCommand(input string) Model {
 		return m
 	}
 
+	// Reset patience timer — controller gave instructions
+	if ac, exists := newPlanes[cmd.Callsign]; exists {
+		ac = ac.ResetPatience()
+		newPlanes[cmd.Callsign] = ac
+	}
+
 	// Resolve direct-to-fix: look up fix position from the map
 	if cmd.DirectFix != "" {
 		ac := newPlanes[cmd.Callsign]
@@ -727,6 +733,34 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 				ac.State = aircraft.OnRunway
 				ac.TaxiPath = nil
 				ac.TaxiRoute = nil
+			}
+		}
+
+		// Patience system — airborne aircraft waiting for instructions
+		if ac.State.IsAirborne() && ac.PatienceMax > 0 {
+			ac.PatienceTicks++
+
+			// Check if it's time to nag
+			nagThreshold := ac.PatienceMax + ac.PatienceNagCount*aircraft.PatienceNagEvery
+			if ac.PatienceTicks >= nagThreshold {
+				ac.PatienceNagCount++
+				switch {
+				case ac.PatienceNagCount >= aircraft.PatienceLeaveAt:
+					// Aircraft leaves — score penalty
+					m.score--
+					if m.score < 0 {
+						m.score = 0
+					}
+					m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
+						fmt.Sprintf("%s leaving your airspace, good day", ac.Callsign)))
+					continue // skip adding to activeAircraft
+				case ac.PatienceNagCount >= aircraft.PatiencePenaltyAt:
+					m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
+						fmt.Sprintf("%s requesting ANY instructions!", ac.Callsign)))
+				default:
+					m = m.addRadio(radio.PilotMessage(elapsed, ac.Callsign,
+						fmt.Sprintf("%s still waiting for vectors", ac.Callsign)))
+				}
 			}
 		}
 

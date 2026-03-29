@@ -341,6 +341,12 @@ func renderStrip(ac aircraft.Aircraft) string {
 		sb.WriteString(ui.AircraftCrashed.Render(callsign))
 	case ac.State.IsGround():
 		sb.WriteString(ui.AircraftGround.Render(callsign))
+	case ac.PatienceLevel() >= 3:
+		sb.WriteString(ui.PatienceAngry.Render(callsign))
+	case ac.PatienceLevel() >= 2:
+		sb.WriteString(ui.PatienceImpatient.Render(callsign))
+	case ac.PatienceLevel() >= 1:
+		sb.WriteString(ui.PatienceWaiting.Render(callsign))
 	default:
 		sb.WriteString(ui.AircraftNormal.Render(callsign))
 	}

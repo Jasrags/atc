@@ -45,6 +45,20 @@ var (
 	FixStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("73"))
 
+	// Patience indicators (flight strip callsign colors)
+	PatienceWaiting = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("229")).
+			Bold(true)
+
+	PatienceImpatient = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("214")).
+			Bold(true)
+
+	PatienceAngry = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Bold(true).
+			Blink(true)
+
 	// Taxiways and ground features
 	TaxiwayStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240"))

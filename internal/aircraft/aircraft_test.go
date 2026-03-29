@@ -261,6 +261,71 @@ func TestIsGroundStates(t *testing.T) {
 	}
 }
 
+func TestPatienceLevelCalm(t *testing.T) {
+	ac := New("T1", 50, 50, 90, 5, 3)
+	ac.PatienceMax = PatienceDefault
+	ac.PatienceTicks = 0
+	if ac.PatienceLevel() != 0 {
+		t.Errorf("expected calm (0), got %d", ac.PatienceLevel())
+	}
+}
+
+func TestPatienceLevelWaiting(t *testing.T) {
+	ac := New("T1", 50, 50, 90, 5, 3)
+	ac.PatienceMax = 300
+	ac.PatienceTicks = 200 // > 50%, < 75%
+	if ac.PatienceLevel() != 1 {
+		t.Errorf("expected waiting (1), got %d", ac.PatienceLevel())
+	}
+}
+
+func TestPatienceLevelImpatient(t *testing.T) {
+	ac := New("T1", 50, 50, 90, 5, 3)
+	ac.PatienceMax = 300
+	ac.PatienceTicks = 250 // > 75%
+	ac.PatienceNagCount = 1
+	if ac.PatienceLevel() != 2 {
+		t.Errorf("expected impatient (2), got %d", ac.PatienceLevel())
+	}
+}
+
+func TestPatienceLevelAngry(t *testing.T) {
+	ac := New("T1", 50, 50, 90, 5, 3)
+	ac.PatienceMax = 300
+	ac.PatienceTicks = 700
+	ac.PatienceNagCount = PatienceLeaveAt
+	if ac.PatienceLevel() != 3 {
+		t.Errorf("expected angry (3), got %d", ac.PatienceLevel())
+	}
+}
+
+func TestPatienceLevelNoPatienceSystem(t *testing.T) {
+	ac := New("T1", 50, 50, 90, 5, 3)
+	ac.PatienceMax = 0 // no patience
+	ac.PatienceTicks = 9999
+	if ac.PatienceLevel() != 0 {
+		t.Errorf("expected calm (0) when patience disabled, got %d", ac.PatienceLevel())
+	}
+}
+
+func TestResetPatience(t *testing.T) {
+	ac := New("T1", 50, 50, 90, 5, 3)
+	ac.PatienceTicks = 500
+	ac.PatienceNagCount = 3
+
+	reset := ac.ResetPatience()
+	if reset.PatienceTicks != 0 {
+		t.Errorf("expected PatienceTicks=0, got %d", reset.PatienceTicks)
+	}
+	if reset.PatienceNagCount != 0 {
+		t.Errorf("expected PatienceNagCount=0, got %d", reset.PatienceNagCount)
+	}
+	// Original unchanged
+	if ac.PatienceTicks != 500 {
+		t.Error("original should be unchanged (immutability)")
+	}
+}
+
 func TestIsAirborneStates(t *testing.T) {
 	airStates := []State{Approaching, Landing, Departing}
 	for _, s := range airStates {

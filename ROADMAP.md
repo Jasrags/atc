@@ -232,18 +232,19 @@ Different aircraft categories with gameplay-affecting differences.
 
 ---
 
-## Priority 6: Pilot Patience / Pressure System (Future)
+## Priority 6: Pilot Patience / Pressure System
 
-**Status: Not Started**
+**Status: Implemented**
 
 Aircraft request instructions and expect timely responses.
 
-- New aircraft announce entry with a request ("AA123 with you, requesting approach")
-- Patience timer per aircraft — starts when they enter or request something
-- If ignored too long: repeated requests, then penalty, then aircraft leaves (score loss)
-- Visual indicator on flight strip (patience bar or color change)
-- Pressure creates urgency to manage multiple aircraft actively
-- Optional: global pressure bar (IATC4 style) — if aggregate pressure hits 100%, game over
+- [x] Patience timer per aircraft — starts at spawn, 30s default before first nag
+- [x] Escalation: "still waiting for vectors" → "requesting ANY instructions!" → leaves airspace (-1 score)
+- [x] Nag every 10 seconds after first nag, 4 nags total before leaving
+- [x] Any command resets the patience timer (PatienceTicks + NagCount)
+- [x] Flight strip callsign color changes: green → yellow → orange → blinking red
+- [x] Radio messages at each escalation level
+- [ ] Optional: global pressure bar (IATC4 style) — future
 
 ---
 
@@ -386,6 +387,7 @@ See [`docs/atc-flight-strips.md`](docs/atc-flight-strips.md) for the full design
 - [x] Controller role system (TRACON with automation, Combined)
 - [x] Separation rules (3-cell lateral, 1-alt vertical, -50/tick penalty, near-miss tracking)
 - [x] Expanded commands: D (direct to fix), TL/TR (forced turn), EX (expedite), L <runway>
+- [x] Pilot patience system (30s timer, nag escalation, aircraft leaves on timeout, visual indicators)
 
 ---
 

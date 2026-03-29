@@ -105,6 +105,7 @@ func (s *Spawner) Spawn(width, height int) Aircraft {
 
 	ac := New(callsign, x, y, heading, altitude, speed)
 	ac.TrailEnabled = s.cfg.PlaneTrails
+	ac.PatienceMax = PatienceDefault
 	return ac
 }
 

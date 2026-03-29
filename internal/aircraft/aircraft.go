@@ -83,6 +83,11 @@ type Aircraft struct {
 	Trail          [][2]int // previous grid positions for trail rendering
 	tickCount      int      // internal frame counter for throttled updates
 
+	// Patience — how long the aircraft has been waiting for instructions
+	PatienceTicks    int // ticks since last command (or since spawn)
+	PatienceMax      int // max ticks before aircraft leaves (0 = no patience system)
+	PatienceNagCount int // how many times we've nagged the controller
+
 	// Landing
 	AssignedLandingRunway string // runway to land on (empty = any)
 
@@ -102,6 +107,37 @@ type Aircraft struct {
 }
 
 const MaxTrailLength = 5
+
+// Patience thresholds (in ticks at 10 FPS)
+const (
+	PatienceDefault  = 300 // 30 seconds before first nag
+	PatienceNagEvery = 100 // nag every 10 seconds after first
+	PatiencePenaltyAt = 2  // score penalty after this many nags
+	PatienceLeaveAt   = 4  // aircraft leaves after this many nags
+)
+
+// PatienceLevel returns a 0-3 urgency level for display purposes.
+// 0 = calm, 1 = waiting, 2 = impatient, 3 = angry (about to leave).
+func (a Aircraft) PatienceLevel() int {
+	if a.PatienceMax == 0 || a.PatienceTicks < a.PatienceMax/2 {
+		return 0
+	}
+	if a.PatienceTicks < a.PatienceMax*3/4 {
+		return 1
+	}
+	if a.PatienceNagCount < PatienceLeaveAt {
+		return 2
+	}
+	return 3
+}
+
+// ResetPatience returns an aircraft with the patience timer reset.
+func (a Aircraft) ResetPatience() Aircraft {
+	next := a
+	next.PatienceTicks = 0
+	next.PatienceNagCount = 0
+	return next
+}
 
 // New creates an aircraft with the given parameters.
 func New(callsign string, x, y float64, heading, altitude, speed int) Aircraft {
