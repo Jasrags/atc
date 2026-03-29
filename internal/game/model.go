@@ -663,7 +663,13 @@ func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 	for k, ac := range m.aircraft {
 		// Check landing
 		if ac.State == aircraft.Landing {
-			for _, rw := range m.runways {
+			for i, rw := range m.runways {
+				// If assigned to a specific runway, skip others
+				if ac.AssignedLandingRunway != "" && i < len(m.gameMap.Runways) {
+					if !strings.Contains(m.gameMap.Runways[i].Name, ac.AssignedLandingRunway) {
+						continue
+					}
+				}
 				if rw.CanLand(ac.GridX(), ac.GridY(), ac.Heading, ac.Altitude) {
 					ac.State = aircraft.Landed
 					m.score++

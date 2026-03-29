@@ -304,29 +304,24 @@ func TestFixNavigationClearsOnArrival(t *testing.T) {
 }
 
 func TestForcedTurnLeft(t *testing.T) {
-	// Heading 350, target 010 — shortest is right (+20), but we force left (-340)
+	// Heading 350, target 010 — shortest is right (+20), but we force left
 	ac := New("T1", 50, 50, 350, 5, 3)
 	ac.TargetHeading = 10
-	ac.ForceTurnDir = 1 // force left
+	ac.ForceTurnDir = ForceTurnLeft
 
 	next := ac.Tick()
-	// Should turn left (decrement heading)
-	if next.Heading >= ac.Heading {
-		// Could wrap around 0, check for that
-		if next.Heading != 349 {
-			t.Errorf("expected left turn from 350, got %d", next.Heading)
-		}
+	if next.Heading != 349 {
+		t.Errorf("expected left turn from 350 to 349, got %d", next.Heading)
 	}
 }
 
 func TestForcedTurnRight(t *testing.T) {
-	// Heading 10, target 350 — shortest is left (-20), but we force right (+340)
+	// Heading 10, target 350 — shortest is left (-20), but we force right
 	ac := New("T1", 50, 50, 10, 5, 3)
 	ac.TargetHeading = 350
-	ac.ForceTurnDir = 2 // force right
+	ac.ForceTurnDir = ForceTurnRight
 
 	next := ac.Tick()
-	// Should turn right (increment heading)
 	if next.Heading != 11 {
 		t.Errorf("expected right turn from 10 to 11, got %d", next.Heading)
 	}

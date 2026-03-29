@@ -41,6 +41,8 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role)
 			return planes, nil, err
 		}
 		ac.TargetHeading = *cmd.Heading
+		ac.TargetFixName = "" // cancel direct-to-fix
+		ac.ForceTurnDir = 0   // reset to shortest path
 		changes = append(changes, fmt.Sprintf("HDG %03d", *cmd.Heading))
 	}
 
@@ -65,7 +67,7 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role)
 			return planes, nil, err
 		}
 		ac.TargetHeading = *cmd.TurnLeft
-		ac.ForceTurnDir = 1 // force left
+		ac.ForceTurnDir = aircraft.ForceTurnLeft
 		ac.TargetFixName = "" // cancel direct-to-fix
 		changes = append(changes, fmt.Sprintf("TURN LEFT HDG %03d", *cmd.TurnLeft))
 	}
@@ -75,7 +77,7 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role)
 			return planes, nil, err
 		}
 		ac.TargetHeading = *cmd.TurnRight
-		ac.ForceTurnDir = 2 // force right
+		ac.ForceTurnDir = aircraft.ForceTurnRight
 		ac.TargetFixName = "" // cancel direct-to-fix
 		changes = append(changes, fmt.Sprintf("TURN RIGHT HDG %03d", *cmd.TurnRight))
 	}
@@ -106,6 +108,7 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role)
 			return planes, nil, err
 		}
 		ac.State = aircraft.Landing
+		ac.AssignedLandingRunway = cmd.LandRunway
 		if cmd.LandRunway != "" {
 			changes = append(changes, fmt.Sprintf("CLEARED TO LAND RWY %s", cmd.LandRunway))
 		} else {

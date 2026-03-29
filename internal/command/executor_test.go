@@ -378,8 +378,8 @@ func TestExecuteTurnLeft(t *testing.T) {
 	if newPlanes["AA123"].TargetHeading != 180 {
 		t.Errorf("TargetHeading = %d, want 180", newPlanes["AA123"].TargetHeading)
 	}
-	if newPlanes["AA123"].ForceTurnDir != 1 {
-		t.Errorf("ForceTurnDir = %d, want 1 (left)", newPlanes["AA123"].ForceTurnDir)
+	if newPlanes["AA123"].ForceTurnDir != aircraft.ForceTurnLeft {
+		t.Errorf("ForceTurnDir = %d, want ForceTurnLeft", newPlanes["AA123"].ForceTurnDir)
 	}
 	if len(changes) == 0 {
 		t.Error("expected changes")
@@ -394,8 +394,8 @@ func TestExecuteTurnRight(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if newPlanes["AA123"].ForceTurnDir != 2 {
-		t.Errorf("ForceTurnDir = %d, want 2 (right)", newPlanes["AA123"].ForceTurnDir)
+	if newPlanes["AA123"].ForceTurnDir != aircraft.ForceTurnRight {
+		t.Errorf("ForceTurnDir = %d, want ForceTurnRight", newPlanes["AA123"].ForceTurnDir)
 	}
 }
 

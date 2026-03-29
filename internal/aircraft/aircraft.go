@@ -83,6 +83,9 @@ type Aircraft struct {
 	Trail          [][2]int // previous grid positions for trail rendering
 	tickCount      int      // internal frame counter for throttled updates
 
+	// Landing
+	AssignedLandingRunway string // runway to land on (empty = any)
+
 	// Navigation
 	TargetFixName string  // name of the fix we're navigating to (empty = no fix)
 	TargetFixX    float64 // X position of the target fix
@@ -173,8 +176,8 @@ const (
 )
 
 const (
-	forceTurnLeft  = 1
-	forceTurnRight = 2
+	ForceTurnLeft  = 1
+	ForceTurnRight = 2
 	fixArrivalDist = 2.0 // grid cells — close enough to "arrive" at a fix
 )
 
@@ -214,10 +217,10 @@ func (a Aircraft) interpolateHeading() Aircraft {
 	}
 	if absDelta <= turnRate {
 		next.Heading = a.TargetHeading
-	} else if a.ForceTurnDir == forceTurnLeft {
+	} else if a.ForceTurnDir == ForceTurnLeft {
 		// Forced left turn (counterclockwise)
 		next.Heading = (a.Heading - turnRate + 360) % 360
-	} else if a.ForceTurnDir == forceTurnRight {
+	} else if a.ForceTurnDir == ForceTurnRight {
 		// Forced right turn (clockwise)
 		next.Heading = (a.Heading + turnRate) % 360
 	} else if delta > 0 {
@@ -235,6 +238,11 @@ func (a Aircraft) interpolateHeading() Aircraft {
 
 func (a Aircraft) interpolateAltitude() Aircraft {
 	if a.Altitude == a.TargetAltitude {
+		if a.ExpeditedAlt {
+			next := a
+			next.ExpeditedAlt = false
+			return next
+		}
 		return a
 	}
 	rate := altTickRate
