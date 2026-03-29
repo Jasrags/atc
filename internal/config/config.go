@@ -4,7 +4,7 @@ package config
 type Difficulty int
 
 const (
-	DifficultyEasy   Difficulty = iota
+	DifficultyEasy Difficulty = iota
 	DifficultyNormal
 	DifficultyHard
 )
@@ -112,7 +112,7 @@ type CallsignStyle int
 
 const (
 	CallsignICAO  CallsignStyle = iota // AA123 format
-	CallsignShort                       // A12 format
+	CallsignShort                      // A12 format
 )
 
 func (c CallsignStyle) String() string {

@@ -198,6 +198,119 @@ func TestParseGroundInvalid(t *testing.T) {
 	}
 }
 
+func TestParseExpandedCommands(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		check func(t *testing.T, cmd Command)
+	}{
+		{
+			"direct to fix",
+			"AA123 D MAFAN",
+			func(t *testing.T, cmd Command) {
+				if cmd.DirectFix != "MAFAN" {
+					t.Errorf("expected DirectFix=MAFAN, got %s", cmd.DirectFix)
+				}
+			},
+		},
+		{
+			"turn left",
+			"AA123 TL 270",
+			func(t *testing.T, cmd Command) {
+				if cmd.TurnLeft == nil || *cmd.TurnLeft != 270 {
+					t.Error("expected TurnLeft=270")
+				}
+			},
+		},
+		{
+			"turn right",
+			"AA123 TR 090",
+			func(t *testing.T, cmd Command) {
+				if cmd.TurnRight == nil || *cmd.TurnRight != 90 {
+					t.Error("expected TurnRight=90")
+				}
+			},
+		},
+		{
+			"expedite",
+			"AA123 EX",
+			func(t *testing.T, cmd Command) {
+				if !cmd.Expedite {
+					t.Error("expected Expedite=true")
+				}
+			},
+		},
+		{
+			"expedite with altitude",
+			"AA123 A3 EX",
+			func(t *testing.T, cmd Command) {
+				if cmd.Altitude == nil || *cmd.Altitude != 3 {
+					t.Error("expected Altitude=3")
+				}
+				if !cmd.Expedite {
+					t.Error("expected Expedite=true")
+				}
+			},
+		},
+		{
+			"land with runway",
+			"AA123 L 28R",
+			func(t *testing.T, cmd Command) {
+				if !cmd.ClearToLand {
+					t.Error("expected ClearToLand=true")
+				}
+				if cmd.LandRunway != "28R" {
+					t.Errorf("expected LandRunway=28R, got %s", cmd.LandRunway)
+				}
+			},
+		},
+		{
+			"land without runway",
+			"AA123 L",
+			func(t *testing.T, cmd Command) {
+				if !cmd.ClearToLand {
+					t.Error("expected ClearToLand=true")
+				}
+				if cmd.LandRunway != "" {
+					t.Errorf("expected empty LandRunway, got %s", cmd.LandRunway)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, err := Parse(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			tt.check(t, cmd)
+		})
+	}
+}
+
+func TestParseExpandedInvalid(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"D missing fix", "AA123 D"},
+		{"TL missing heading", "AA123 TL"},
+		{"TR missing heading", "AA123 TR"},
+		{"TL invalid heading", "AA123 TL abc"},
+		{"TL heading out of range", "AA123 TL 400"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(tt.input)
+			if err == nil {
+				t.Error("expected error, got nil")
+			}
+		})
+	}
+}
+
 func assertIntPtr(t *testing.T, name string, got, want *int) {
 	t.Helper()
 	if got == nil && want == nil {

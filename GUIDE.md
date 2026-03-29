@@ -248,10 +248,18 @@ Type commands in the input bar at the bottom and press Enter:
 | `H<0-359>` | Set heading (degrees) | `AA123 H270` |
 | `A<1-40>` | Set altitude (thousands of feet) | `AA123 A3` |
 | `S<1-5>` | Set speed | `AA123 S2` |
-| `L` | Clear aircraft to land | `AA123 L` |
+| `L [runway]` | Clear to land (optionally on specific runway) | `AA123 L` or `AA123 L 28R` |
+| `D <fix>` | Direct to named waypoint (auto-navigates) | `AA123 D MAFAN` |
+| `TL <heading>` | Turn LEFT to heading (forces direction) | `AA123 TL 270` |
+| `TR <heading>` | Turn RIGHT to heading (forces direction) | `AA123 TR 090` |
+| `EX` | Expedite altitude change (2x rate) | `AA123 A3 EX` |
 | `GA` | Go around (abort landing) | `AA123 GA` |
 
-Airborne commands can be chained: `AA123 H270 A3 S2`
+Airborne commands can be chained: `AA123 H270 A3 S2` or `AA123 D MAFAN A3 EX`
+
+**Direct to fix** is a key TRACON command — instead of manually vectoring with headings, point the aircraft at a named waypoint on the radar. The aircraft recalculates its heading each tick to track toward the fix, and clears the target when it arrives within 2 grid cells.
+
+**Turn left/right** overrides the default shortest-path turn. Useful when you need a specific turn direction to avoid traffic or follow a published procedure.
 
 ### Ground Commands
 

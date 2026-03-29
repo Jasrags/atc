@@ -83,6 +83,13 @@ type Aircraft struct {
 	Trail          [][2]int // previous grid positions for trail rendering
 	tickCount      int      // internal frame counter for throttled updates
 
+	// Navigation
+	TargetFixName string  // name of the fix we're navigating to (empty = no fix)
+	TargetFixX    float64 // X position of the target fix
+	TargetFixY    float64 // Y position of the target fix
+	ForceTurnDir  int     // 0 = shortest path, 1 = force left, 2 = force right
+	ExpeditedAlt  bool    // double altitude change rate
+
 	// Ground operations
 	AssignedGate   string   // gate ID (e.g., "G1")
 	AssignedRunway string   // runway for departure (e.g., "27")
@@ -146,6 +153,11 @@ func (a Aircraft) Tick() Aircraft {
 		next.Trail = trail
 	}
 
+	// If navigating to a fix, recalculate target heading toward it
+	if next.TargetFixName != "" {
+		next = next.updateFixHeading()
+	}
+
 	next = next.interpolateHeading()
 	next = next.interpolateAltitude()
 	next = next.interpolateSpeed()
@@ -160,6 +172,35 @@ const (
 	spdTickRate    = 10   // change speed by 1 every N ticks (~1s per speed unit)
 )
 
+const (
+	forceTurnLeft  = 1
+	forceTurnRight = 2
+	fixArrivalDist = 2.0 // grid cells — close enough to "arrive" at a fix
+)
+
+// updateFixHeading recalculates the target heading toward the current target fix.
+// Clears the fix when the aircraft is within arrival distance.
+func (a Aircraft) updateFixHeading() Aircraft {
+	next := a
+	dx := next.TargetFixX - next.X
+	dy := next.TargetFixY - next.Y
+	dist := math.Sqrt(dx*dx + dy*dy)
+
+	if dist < fixArrivalDist {
+		// Arrived at fix — clear the navigation target
+		next.TargetFixName = ""
+		return next
+	}
+
+	// Calculate heading toward fix: atan2(dx, -dy) converted to degrees
+	hdg := math.Atan2(dx, -dy) * 180 / math.Pi
+	if hdg < 0 {
+		hdg += 360
+	}
+	next.TargetHeading = int(math.Round(hdg)) % 360
+	return next
+}
+
 func (a Aircraft) interpolateHeading() Aircraft {
 	if a.Heading == a.TargetHeading {
 		return a
@@ -173,10 +214,21 @@ func (a Aircraft) interpolateHeading() Aircraft {
 	}
 	if absDelta <= turnRate {
 		next.Heading = a.TargetHeading
+	} else if a.ForceTurnDir == forceTurnLeft {
+		// Forced left turn (counterclockwise)
+		next.Heading = (a.Heading - turnRate + 360) % 360
+	} else if a.ForceTurnDir == forceTurnRight {
+		// Forced right turn (clockwise)
+		next.Heading = (a.Heading + turnRate) % 360
 	} else if delta > 0 {
 		next.Heading = (a.Heading + turnRate) % 360
 	} else {
 		next.Heading = (a.Heading - turnRate + 360) % 360
+	}
+
+	// Clear forced turn direction once we reach the target
+	if next.Heading == next.TargetHeading {
+		next.ForceTurnDir = 0
 	}
 	return next
 }
@@ -185,7 +237,14 @@ func (a Aircraft) interpolateAltitude() Aircraft {
 	if a.Altitude == a.TargetAltitude {
 		return a
 	}
-	if a.tickCount%altTickRate != 0 {
+	rate := altTickRate
+	if a.ExpeditedAlt {
+		rate = altTickRate / 2 // double the rate
+		if rate < 1 {
+			rate = 1
+		}
+	}
+	if a.tickCount%rate != 0 {
 		return a
 	}
 	next := a

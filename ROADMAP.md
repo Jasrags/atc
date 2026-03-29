@@ -190,18 +190,18 @@ Replace binary collision with distance-based separation enforcement and add wake
 
 ---
 
-## Priority 4: Expanded Command Set (Future)
+## Priority 4: Expanded Command Set
 
-**Status: Not Started**
+**Status: Implemented (except HLD)**
 
-Richer ATC commands closer to real phraseology. Note: `T`, `PB`, `TX`, `HS`, `CR`, `GATE` are now part of Ground Operations (Priority 1). This section covers the remaining airborne commands.
+Richer ATC commands closer to real phraseology.
 
-- `D <fix>` — Direct to waypoint/fix (aircraft auto-navigates to the named fix)
-- `HLD <fix>` — Hold at fix (circle a waypoint)
-- `GA` — Go around (abort landing, climb, maintain heading)
-- `EX` — Expedite (double altitude change rate)
-- `TL <heading>` / `TR <heading>` — Turn left/right to heading (force turn direction)
-- `L <runway>` — Clear to land on specific runway (for multi-runway airports)
+- [x] `D <fix>` — Direct to waypoint/fix (aircraft auto-navigates, recalculates heading each tick, clears on arrival within 2 cells)
+- [ ] `HLD <fix>` — Hold at fix (circle a waypoint) — future
+- [x] `GA` — Go around (abort landing, climb, maintain heading) — implemented in Ground Ops
+- [x] `EX` — Expedite (double altitude change rate)
+- [x] `TL <heading>` / `TR <heading>` — Turn left/right to heading (force turn direction, overrides shortest-path)
+- [x] `L <runway>` — Clear to land on specific runway (for multi-runway airports like Chicago)
 
 ---
 
@@ -385,6 +385,7 @@ See [`docs/atc-flight-strips.md`](docs/atc-flight-strips.md) for the full design
 - [x] Arrival-to-gate flow (land → GATE → taxi → arrive)
 - [x] Controller role system (TRACON with automation, Combined)
 - [x] Separation rules (3-cell lateral, 1-alt vertical, -50/tick penalty, near-miss tracking)
+- [x] Expanded commands: D (direct to fix), TL/TR (forced turn), EX (expedite), L <runway>
 
 ---
 

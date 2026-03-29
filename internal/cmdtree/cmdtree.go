@@ -44,6 +44,10 @@ var airCommands = []commandDef{
 	{"A", "Altitude"},
 	{"S", "Speed"},
 	{"L", "Land"},
+	{"D", "Direct"},
+	{"TL", "Turn Left"},
+	{"TR", "Turn Right"},
+	{"EX", "Expedite"},
 }
 
 // landingCommands are available for aircraft cleared to land.

@@ -276,3 +276,75 @@ func TestIsAirborneStates(t *testing.T) {
 	}
 }
 
+func TestFixNavigationUpdatesHeading(t *testing.T) {
+	// Aircraft at (10,10) heading north, fix is at (50,10) — should turn east (heading ~90)
+	ac := New("T1", 10, 10, 0, 5, 3)
+	ac.TargetFixName = "EAST"
+	ac.TargetFixX = 50
+	ac.TargetFixY = 10
+
+	// After one tick, target heading should be toward the fix (approximately 90)
+	next := ac.Tick()
+	if next.TargetHeading < 80 || next.TargetHeading > 100 {
+		t.Errorf("expected target heading near 90, got %d", next.TargetHeading)
+	}
+}
+
+func TestFixNavigationClearsOnArrival(t *testing.T) {
+	// Aircraft very close to fix — should clear the fix
+	ac := New("T1", 49, 10, 90, 5, 3)
+	ac.TargetFixName = "NEAR"
+	ac.TargetFixX = 50
+	ac.TargetFixY = 10
+
+	next := ac.Tick()
+	if next.TargetFixName != "" {
+		t.Errorf("expected fix cleared on arrival, got %s", next.TargetFixName)
+	}
+}
+
+func TestForcedTurnLeft(t *testing.T) {
+	// Heading 350, target 010 — shortest is right (+20), but we force left (-340)
+	ac := New("T1", 50, 50, 350, 5, 3)
+	ac.TargetHeading = 10
+	ac.ForceTurnDir = 1 // force left
+
+	next := ac.Tick()
+	// Should turn left (decrement heading)
+	if next.Heading >= ac.Heading {
+		// Could wrap around 0, check for that
+		if next.Heading != 349 {
+			t.Errorf("expected left turn from 350, got %d", next.Heading)
+		}
+	}
+}
+
+func TestForcedTurnRight(t *testing.T) {
+	// Heading 10, target 350 — shortest is left (-20), but we force right (+340)
+	ac := New("T1", 50, 50, 10, 5, 3)
+	ac.TargetHeading = 350
+	ac.ForceTurnDir = 2 // force right
+
+	next := ac.Tick()
+	// Should turn right (increment heading)
+	if next.Heading != 11 {
+		t.Errorf("expected right turn from 10 to 11, got %d", next.Heading)
+	}
+}
+
+func TestExpeditedAltitude(t *testing.T) {
+	ac := New("T1", 50, 50, 90, 5, 3)
+	ac.TargetAltitude = 10
+	ac.ExpeditedAlt = true
+
+	// Run enough ticks for one altitude change at expedited rate
+	normalRate := altTickRate
+	expeditedRate := normalRate / 2
+	for i := 0; i < expeditedRate+1; i++ {
+		ac = ac.Tick()
+	}
+	if ac.Altitude <= 5 {
+		t.Errorf("expected altitude increase with expedite, got %d", ac.Altitude)
+	}
+}
+

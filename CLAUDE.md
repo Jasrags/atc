@@ -123,10 +123,21 @@ Settings are configured on the setup screen before each game and stored in `conf
 
 ```
 <CALLSIGN> <CMD> [<CMD>...]
-  H<0-359>    Set target heading
-  A<1-40>     Set target altitude (thousands of feet)
-  S<1-5>      Set target speed
-  L           Clear to land
+  H<0-359>      Set target heading (shortest turn)
+  A<1-40>       Set target altitude (thousands of feet)
+  S<1-5>        Set target speed
+  L [runway]    Clear to land (optionally on specific runway)
+  D <fix>       Direct to named waypoint (auto-navigate)
+  TL <heading>  Turn left to heading (forced direction)
+  TR <heading>  Turn right to heading (forced direction)
+  EX            Expedite altitude change (2x rate)
+  GA            Go around (abort landing)
+  T             Cleared for takeoff
+  PB [runway]   Pushback approved (optional: expect runway)
+  TX <tw...>    Taxi via named taxiways
+  HS <runway>   Hold short of runway
+  CR <runway>   Cleared to cross runway
+  GATE <gate>   Taxi to gate
 ```
 
 ## Testing

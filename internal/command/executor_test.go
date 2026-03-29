@@ -351,3 +351,90 @@ func TestTRACONAllowsAirborneCommands(t *testing.T) {
 		t.Errorf("TRACON should allow heading command: %v", err)
 	}
 }
+
+func TestExecuteDirectFix(t *testing.T) {
+	planes := makePlanes()
+	cmd := Command{Callsign: "AA123", DirectFix: "MAFAN"}
+	newPlanes, changes, err := Execute(cmd, planes, config.RoleCombined)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newPlanes["AA123"].TargetFixName != "MAFAN" {
+		t.Errorf("TargetFixName = %s, want MAFAN", newPlanes["AA123"].TargetFixName)
+	}
+	if len(changes) == 0 {
+		t.Error("expected changes")
+	}
+}
+
+func TestExecuteTurnLeft(t *testing.T) {
+	planes := makePlanes()
+	h := 180
+	cmd := Command{Callsign: "AA123", TurnLeft: &h}
+	newPlanes, changes, err := Execute(cmd, planes, config.RoleCombined)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newPlanes["AA123"].TargetHeading != 180 {
+		t.Errorf("TargetHeading = %d, want 180", newPlanes["AA123"].TargetHeading)
+	}
+	if newPlanes["AA123"].ForceTurnDir != 1 {
+		t.Errorf("ForceTurnDir = %d, want 1 (left)", newPlanes["AA123"].ForceTurnDir)
+	}
+	if len(changes) == 0 {
+		t.Error("expected changes")
+	}
+}
+
+func TestExecuteTurnRight(t *testing.T) {
+	planes := makePlanes()
+	h := 90
+	cmd := Command{Callsign: "AA123", TurnRight: &h}
+	newPlanes, _, err := Execute(cmd, planes, config.RoleCombined)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newPlanes["AA123"].ForceTurnDir != 2 {
+		t.Errorf("ForceTurnDir = %d, want 2 (right)", newPlanes["AA123"].ForceTurnDir)
+	}
+}
+
+func TestExecuteExpedite(t *testing.T) {
+	planes := makePlanes()
+	cmd := Command{Callsign: "AA123", Expedite: true}
+	newPlanes, changes, err := Execute(cmd, planes, config.RoleCombined)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !newPlanes["AA123"].ExpeditedAlt {
+		t.Error("expected ExpeditedAlt=true")
+	}
+	if len(changes) == 0 {
+		t.Error("expected changes")
+	}
+}
+
+func TestExecuteLandWithRunway(t *testing.T) {
+	planes := makePlanes()
+	cmd := Command{Callsign: "AA123", ClearToLand: true, LandRunway: "28R"}
+	newPlanes, changes, err := Execute(cmd, planes, config.RoleCombined)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newPlanes["AA123"].State != aircraft.Landing {
+		t.Errorf("state = %v, want Landing", newPlanes["AA123"].State)
+	}
+	if len(changes) == 0 {
+		t.Error("expected changes")
+	}
+	// Should mention runway in changes
+	found := false
+	for _, c := range changes {
+		if c == "CLEARED TO LAND RWY 28R" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected runway in changes, got %v", changes)
+	}
+}

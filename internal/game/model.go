@@ -390,6 +390,27 @@ func (m Model) processCommand(input string) Model {
 		return m
 	}
 
+	// Resolve direct-to-fix: look up fix position from the map
+	if cmd.DirectFix != "" {
+		ac := newPlanes[cmd.Callsign]
+		found := false
+		for _, fix := range m.gameMap.Fixes {
+			if fix.Name == cmd.DirectFix {
+				ac.TargetFixX = float64(fix.X)
+				ac.TargetFixY = float64(fix.Y)
+				newPlanes[cmd.Callsign] = ac
+				found = true
+				break
+			}
+		}
+		if !found {
+			m = m.addRadio(radio.SystemMessage(elapsed,
+				fmt.Sprintf("unknown fix: %s", cmd.DirectFix), radio.Normal))
+			ac.TargetFixName = ""
+			newPlanes[cmd.Callsign] = ac
+		}
+	}
+
 	// Resolve taxi route into a path if TX command was issued
 	if len(cmd.TaxiRoute) > 0 {
 		ac := newPlanes[cmd.Callsign]

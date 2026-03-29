@@ -60,6 +60,44 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role)
 		changes = append(changes, fmt.Sprintf("SPD %d", *cmd.Speed))
 	}
 
+	if cmd.TurnLeft != nil {
+		if err = requireAirborne(ac); err != nil {
+			return planes, nil, err
+		}
+		ac.TargetHeading = *cmd.TurnLeft
+		ac.ForceTurnDir = 1 // force left
+		ac.TargetFixName = "" // cancel direct-to-fix
+		changes = append(changes, fmt.Sprintf("TURN LEFT HDG %03d", *cmd.TurnLeft))
+	}
+
+	if cmd.TurnRight != nil {
+		if err = requireAirborne(ac); err != nil {
+			return planes, nil, err
+		}
+		ac.TargetHeading = *cmd.TurnRight
+		ac.ForceTurnDir = 2 // force right
+		ac.TargetFixName = "" // cancel direct-to-fix
+		changes = append(changes, fmt.Sprintf("TURN RIGHT HDG %03d", *cmd.TurnRight))
+	}
+
+	if cmd.DirectFix != "" {
+		if err = requireAirborne(ac); err != nil {
+			return planes, nil, err
+		}
+		// Fix position is resolved in the game model (executor has no map access)
+		ac.TargetFixName = cmd.DirectFix
+		ac.ForceTurnDir = 0 // use shortest path to fix
+		changes = append(changes, fmt.Sprintf("DIRECT %s", cmd.DirectFix))
+	}
+
+	if cmd.Expedite {
+		if err = requireAirborne(ac); err != nil {
+			return planes, nil, err
+		}
+		ac.ExpeditedAlt = true
+		changes = append(changes, "EXPEDITE")
+	}
+
 	if cmd.ClearToLand {
 		if ac.State == aircraft.Landing {
 			return planes, nil, fmt.Errorf("%s already cleared to land", cmd.Callsign)
@@ -68,7 +106,11 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role)
 			return planes, nil, err
 		}
 		ac.State = aircraft.Landing
-		changes = append(changes, "CLEARED TO LAND")
+		if cmd.LandRunway != "" {
+			changes = append(changes, fmt.Sprintf("CLEARED TO LAND RWY %s", cmd.LandRunway))
+		} else {
+			changes = append(changes, "CLEARED TO LAND")
+		}
 	}
 
 	if cmd.GoAround {
