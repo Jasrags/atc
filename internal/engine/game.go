@@ -541,8 +541,11 @@ func (g *Game) trySpawnDeparture() bool {
 	}
 
 	g.aircraft[ac.Callsign] = ac
-	g.addRadio(radio.PilotMessage(g.elapsed, ac.Callsign,
-		fmt.Sprintf("%s at gate %s, requesting pushback", ac.Callsign, ac.AssignedGate)))
+	// Ground comms only audible when player controls the surface (Tower/Combined).
+	if g.gameConfig.Role != config.RoleTRACON {
+		g.addRadio(radio.PilotMessage(g.elapsed, ac.Callsign,
+			fmt.Sprintf("%s at gate %s, requesting pushback", ac.Callsign, ac.AssignedGate)))
+	}
 	return true
 }
 
