@@ -16,6 +16,9 @@ coverage.html
 # Claude Code
 .claude/settings.local.json
 
+# FAA charts (large binary reference files — not version controlled)
+docs/SAN/*.PDF
+
 # OS
 .DS_Store
 Thumbs.db
