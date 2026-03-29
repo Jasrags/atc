@@ -74,6 +74,18 @@ var (
 
 // --- Shared drawing helpers ---
 
+// scaledFontSize returns a font size that scales with camera zoom, clamped to readable bounds.
+func scaledFontSize(baseSize, zoom, minSize, maxSize float64) float64 {
+	s := baseSize * zoom
+	if s < minSize {
+		s = minSize
+	}
+	if s > maxSize {
+		s = maxSize
+	}
+	return s
+}
+
 // drawLabel draws text at (x, y) with the given font size and color.
 func drawLabel(screen *ebiten.Image, x, y float64, s string, size float64, c color.Color) {
 	face := &text.GoTextFace{Source: monoFaceSource, Size: size}

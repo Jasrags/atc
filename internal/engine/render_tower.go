@@ -107,10 +107,11 @@ func (g *Game) drawTowerRunway(screen *ebiten.Image, rw gamemap.Runway) {
 
 	// Inset from threshold toward center.
 	inset := g.camera.ScaledSize(1.5)
-	drawLabel(screen, sx2-dx*inset-6, sy2+dy*inset-5,
-		fmt.Sprintf("%d", numApproach), 10, towerRunwayNum)
-	drawLabel(screen, sx1+dx*inset-6, sy1-dy*inset-5,
-		fmt.Sprintf("%d", numOpposite), 10, towerRunwayNum)
+	rwyFontSize := scaledFontSize(4, g.camera.Zoom, 10, 28)
+	drawLabel(screen, sx2-dx*inset-8, sy2+dy*inset-6,
+		fmt.Sprintf("%d", numApproach), rwyFontSize, towerRunwayNum)
+	drawLabel(screen, sx1+dx*inset-8, sy1-dy*inset-6,
+		fmt.Sprintf("%d", numOpposite), rwyFontSize, towerRunwayNum)
 
 	// Draw connector stubs from runway entry nodes to the runway centerline.
 	// Only draw connectors belonging to this runway.
@@ -176,7 +177,8 @@ func (g *Game) drawTowerTaxiways(screen *ebiten.Image) {
 		if !labeled[edge.Taxiway] {
 			mx := (sx1 + sx2) / 2
 			my := (sy1 + sy2) / 2
-			drawLabel(screen, mx-3, my-12, edge.Taxiway, 8, towerTaxiLabel)
+			twFont := scaledFontSize(3, g.camera.Zoom, 8, 22)
+			drawLabel(screen, mx-3, my-twFont*1.5, edge.Taxiway, twFont, towerTaxiLabel)
 			labeled[edge.Taxiway] = true
 		}
 	}
@@ -203,7 +205,8 @@ func (g *Game) drawTowerGates(screen *ebiten.Image) {
 		vector.DrawFilledRect(screen, float32(sx)-gw/2, float32(sy)-gh/2, gw, gh, towerGateFill, false)
 		vector.StrokeRect(screen, float32(sx)-gw/2, float32(sy)-gh/2, gw, gh, 1, towerGateEdge, false)
 
-		drawLabel(screen, sx-6, sy-4, gate.ID, 7, towerGateLabel)
+		gateFont := scaledFontSize(3, g.camera.Zoom, 7, 20)
+		drawLabel(screen, sx-gateFont*0.8, sy-gateFont*0.5, gate.ID, gateFont, towerGateLabel)
 	}
 }
 
@@ -225,7 +228,8 @@ func (g *Game) drawTowerHoldShorts(screen *ebiten.Image) {
 			float32(sx)+barHalf, float32(sy),
 			3, 2, 1.5, towerHoldShort)
 
-		drawLabel(screen, sx+10, sy-4, "HS", 6, towerHoldShort)
+		hsFont := scaledFontSize(2.5, g.camera.Zoom, 6, 18)
+		drawLabel(screen, sx+float64(barHalf)+4, sy-hsFont*0.5, "HS", hsFont, towerHoldShort)
 	}
 }
 
@@ -279,11 +283,12 @@ func (g *Game) drawTowerAircraft(screen *ebiten.Image) {
 			vector.DrawFilledRect(screen, float32(sx)-hs, float32(sy)-hs, hs*2, hs*2, c, false)
 		}
 
-		// Short leader line + callsign tag.
-		lx := sx + 10
-		ly := sy - 8
+		// Short leader line + callsign tag — font scales with zoom.
+		acFont := scaledFontSize(3.5, g.camera.Zoom, 8, 22)
+		lx := sx + acFont*1.2
+		ly := sy - acFont
 		vector.StrokeLine(screen, float32(sx), float32(sy), float32(lx), float32(ly), 0.6, towerLeader, false)
-		drawLabel(screen, lx+2, ly-4, ac.Callsign, 8, towerDataTag)
+		drawLabel(screen, lx+2, ly-acFont*0.4, ac.Callsign, acFont, towerDataTag)
 	}
 }
 
