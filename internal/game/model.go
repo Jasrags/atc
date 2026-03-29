@@ -288,7 +288,7 @@ func (m Model) handleSetupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) buildConfigFromSetup() config.GameConfig {
 	return config.GameConfig{
 		MapID:         m.maps[m.setupSelections[setupMap]].ID,
-		Role:          config.Role(m.setupSelections[setupRole]),
+		Role:          config.RoleFromIndex(m.setupSelections[setupRole]),
 		Difficulty:    config.Difficulty(m.setupSelections[setupDiff]),
 		GameMode:      config.GameMode(m.setupSelections[setupMode]),
 		CallsignStyle: config.CallsignStyle(m.setupSelections[setupCallsign]),

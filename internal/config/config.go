@@ -79,7 +79,7 @@ func (r Role) String() string {
 	}
 }
 
-// IsGroundCommand reports whether a command keyword is a ground/tower command.
+// IsCommandAllowed reports whether the given command keyword is permitted for this role.
 func (r Role) IsCommandAllowed(cmd string) bool {
 	groundCmds := map[string]bool{"PB": true, "TX": true, "HS": true, "CR": true, "GATE": true, "T": true}
 	switch r {
@@ -148,9 +148,20 @@ func DefaultConfig() GameConfig {
 	}
 }
 
-// RoleOptions returns the display labels for role selection.
+// RoleOptions returns the display labels for available role selections.
+// Tower mode is not yet implemented — it will be added when Tower automation is built.
 func RoleOptions() []string {
-	return []string{"TRACON", "Tower", "Combined"}
+	return []string{"TRACON", "Combined"}
+}
+
+// RoleFromIndex converts a setup screen selection index to a Role.
+// This is needed because the options list may not match the iota order.
+func RoleFromIndex(idx int) Role {
+	roles := []Role{RoleTRACON, RoleCombined}
+	if idx >= 0 && idx < len(roles) {
+		return roles[idx]
+	}
+	return RoleTRACON
 }
 
 // DifficultyOptions returns the display labels for difficulty selection.

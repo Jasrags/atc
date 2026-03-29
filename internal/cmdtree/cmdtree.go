@@ -296,7 +296,7 @@ func chainOptions(state aircraft.State, tokens []string, role config.Role) []Opt
 		IsSubmit: true,
 	})
 
-	return options
+	return filterByRole(options, role)
 }
 
 // filterByRole removes options that the current role doesn't allow.
