@@ -3,7 +3,9 @@ package engine
 import (
 	"fmt"
 	"math"
+	"strings"
 
+	"github.com/Jasrags/atc/internal/aircraft"
 	"github.com/Jasrags/atc/internal/gamemap"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -16,7 +18,7 @@ func (g *Game) drawTRACON(screen *ebiten.Image) {
 	g.drawTraconRangeRings(screen)
 	g.drawTraconFixes(screen)
 	g.drawTraconRunways(screen)
-	g.drawTraconDemoAircraft(screen)
+	g.drawTraconAircraft(screen)
 }
 
 // --- Grid ---
@@ -33,11 +35,9 @@ func (g *Game) drawTraconGrid(screen *ebiten.Image) {
 // --- Range rings ---
 
 func (g *Game) drawTraconRangeRings(screen *ebiten.Image) {
-	// Center on the primary runway.
 	rw := g.gameMap.PrimaryRunway()
 	cx, cy := worldToScreen(float64(rw.X), float64(rw.Y))
 
-	// Draw rings at 10, 20, 30, 40 cell intervals (~nm equivalent).
 	for _, radius := range []float64{10, 20, 30, 40} {
 		r := float32(radius * cellSize)
 		drawCircle(screen, float32(cx), float32(cy), r, traconRangeRing)
@@ -52,7 +52,6 @@ func (g *Game) drawTraconFixes(screen *ebiten.Image) {
 
 		switch fix.Type {
 		case gamemap.FixWaypoint:
-			// Small triangle.
 			s := float32(4)
 			vector.StrokeLine(screen, float32(sx), float32(sy)-s, float32(sx)-s*0.7, float32(sy)+s*0.5, 0.8, traconFix, false)
 			vector.StrokeLine(screen, float32(sx)-s*0.7, float32(sy)+s*0.5, float32(sx)+s*0.7, float32(sy)+s*0.5, 0.8, traconFix, false)
@@ -61,10 +60,8 @@ func (g *Game) drawTraconFixes(screen *ebiten.Image) {
 			drawCircle(screen, float32(sx), float32(sy), 4, traconFix)
 			vector.DrawFilledCircle(screen, float32(sx), float32(sy), 1.5, traconFix, false)
 		case gamemap.FixVOR:
-			// Small hexagon-like shape.
 			drawCircle(screen, float32(sx), float32(sy), 3, traconFix)
 		case gamemap.FixIntersection:
-			// Small plus.
 			vector.StrokeLine(screen, float32(sx)-3, float32(sy), float32(sx)+3, float32(sy), 0.8, traconFix, false)
 			vector.StrokeLine(screen, float32(sx), float32(sy)-3, float32(sx), float32(sy)+3, 0.8, traconFix, false)
 		}
@@ -95,11 +92,11 @@ func (g *Game) drawTraconRunway(screen *ebiten.Image, rw gamemap.Runway) {
 	sx1, sy1 := worldToScreen(x1, y1)
 	sx2, sy2 := worldToScreen(x2, y2)
 
-	// Runway centerline — solid, bright.
+	// Runway centerline.
 	vector.StrokeLine(screen, float32(sx1), float32(sy1), float32(sx2), float32(sy2), 3, traconRunway, false)
 
-	// Extended approach course — dashed lines extending beyond runway.
-	extLen := float64(25) * cellSize // extend 25 cells
+	// Extended approach course — dashed.
+	extLen := float64(25) * cellSize
 	drawDashedLine(screen,
 		float32(sx2), float32(sy2),
 		float32(sx2+dx*extLen), float32(sy2-dy*extLen),
@@ -119,61 +116,63 @@ func (g *Game) drawTraconRunway(screen *ebiten.Image, rw gamemap.Runway) {
 		fmt.Sprintf("%d", numOpposite), 9, traconRunwayNum)
 }
 
-// --- Demo aircraft (static, replaced by live aircraft in Phase 2) ---
+// --- Live aircraft rendering ---
 
-func (g *Game) drawTraconDemoAircraft(screen *ebiten.Image) {
-	// Simulate 3 aircraft with history trails and data blocks.
-	demos := []struct {
-		x, y       float64
-		callsign   string
-		alt, spd   int
-		heading    int
-		descending bool
-		trail      [][2]float64 // history positions
-	}{
-		{
-			x: 35, y: 12, callsign: "AA341", alt: 8, spd: 22, heading: 250, descending: true,
-			trail: [][2]float64{{36.5, 10.5}, {36, 11}, {35.5, 11.5}},
-		},
-		{
-			x: 25, y: 20, callsign: "SW482", alt: 5, spd: 19, heading: 180, descending: true,
-			trail: [][2]float64{{25, 18}, {25, 18.7}, {25, 19.3}},
-		},
-		{
-			x: 60, y: 24, callsign: "UA159", alt: 2, spd: 16, heading: 270, descending: true,
-			trail: [][2]float64{{62.5, 24}, {62, 24}, {61.2, 24}},
-		},
-	}
-
-	for _, ac := range demos {
-		// History trail — fading dots.
-		for i, pos := range ac.trail {
-			sx, sy := worldToScreen(pos[0], pos[1])
-			alpha := float32(0.2) + float32(i)*0.15 // older = dimmer
-			r := float32(1.5)
-			c := traconTrail
-			c.A = uint8(float32(c.A) * alpha)
-			vector.DrawFilledCircle(screen, float32(sx), float32(sy), r, c, false)
+func (g *Game) drawTraconAircraft(screen *ebiten.Image) {
+	for _, ac := range g.aircraft {
+		// Skip ground aircraft that aren't departing.
+		if ac.State.IsGround() && ac.State != aircraft.OnRunway {
+			continue
 		}
 
-		sx, sy := worldToScreen(ac.x, ac.y)
+		sx, sy := worldToScreen(ac.X, ac.Y)
 
-		// Target blip — bright filled circle.
-		vector.DrawFilledCircle(screen, float32(sx), float32(sy), 3.5, traconTarget, false)
+		// History trail — fading dots from oldest (dimmest) to newest.
+		for i, pos := range ac.Trail {
+			tx, ty := worldToScreen(float64(pos[0]), float64(pos[1]))
+			// Fade: older dots are dimmer. Index 0 = oldest.
+			alpha := float32(0.15) + float32(i)*float32(0.15)
+			if alpha > 0.8 {
+				alpha = 0.8
+			}
+			c := traconTrail
+			c.A = uint8(float32(255) * alpha)
+			vector.DrawFilledCircle(screen, float32(tx), float32(ty), 1.5, c, false)
+		}
 
-		// Leader line — offset to upper-right (default octant).
+		// Target blip.
+		targetColor := traconTarget
+		if g.activeViolations[ac.Callsign+":"] || isViolating(ac.Callsign, g.activeViolations) {
+			targetColor = traconConflict
+		}
+		vector.DrawFilledCircle(screen, float32(sx), float32(sy), 3.5, targetColor, false)
+
+		// Leader line — offset to upper-right by default.
 		leaderLen := float64(25)
 		lx := sx + leaderLen
 		ly := sy - leaderLen
 		vector.StrokeLine(screen, float32(sx), float32(sy), float32(lx), float32(ly), 0.8, traconLeader, false)
 
-		// Data block at end of leader line.
-		arrow := " "
-		if ac.descending {
-			arrow = "\u2193" // ↓
+		// Data block.
+		altArrow := " "
+		if ac.Altitude < ac.TargetAltitude {
+			altArrow = "\u2191" // ↑
+		} else if ac.Altitude > ac.TargetAltitude {
+			altArrow = "\u2193" // ↓
 		}
-		drawLabel(screen, lx+3, ly-10, ac.callsign, 9, traconDataBlock)
+		drawLabel(screen, lx+3, ly-10, ac.Callsign, 9, traconDataBlock)
 		drawLabel(screen, lx+3, ly,
-			fmt.Sprintf("%02d %02d%s", ac.alt, ac.spd, arrow), 8, traconDataBlock)
+			fmt.Sprintf("%02d %02d%s", ac.Altitude, ac.Speed*10, altArrow), 8, traconDataBlock)
 	}
+}
+
+// isViolating checks if a callsign appears in any violation pair key.
+func isViolating(callsign string, violations map[string]bool) bool {
+	for pair := range violations {
+		parts := strings.SplitN(pair, ":", 2)
+		if len(parts) == 2 && (parts[0] == callsign || parts[1] == callsign) {
+			return true
+		}
+	}
+	return false
 }

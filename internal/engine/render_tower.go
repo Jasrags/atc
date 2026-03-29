@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/Jasrags/atc/internal/aircraft"
 	"github.com/Jasrags/atc/internal/gamemap"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -16,8 +17,8 @@ func (g *Game) drawTower(screen *ebiten.Image) {
 	g.drawTowerGates(screen)
 	g.drawTowerHoldShorts(screen)
 	g.drawTowerRunways(screen)
+	g.drawTowerAircraft(screen)
 	g.drawTowerApproachInset(screen)
-	g.drawTowerDemoAircraft(screen)
 }
 
 // --- Runways (filled rectangles with threshold markings) ---
@@ -34,8 +35,6 @@ func (g *Game) drawTowerRunway(screen *ebiten.Image, rw gamemap.Runway) {
 	dy := -math.Cos(rad)
 
 	halfLen := float64(rw.Length-1) / 2.0
-
-	// Runway endpoints in world coords.
 	x1 := float64(rw.X) - halfLen*dx
 	y1 := float64(rw.Y) - halfLen*dy
 	x2 := float64(rw.X) + halfLen*dx
@@ -47,9 +46,8 @@ func (g *Game) drawTowerRunway(screen *ebiten.Image, rw gamemap.Runway) {
 	// Perpendicular direction for width.
 	perpX := dy
 	perpY := dx
-	runwayWidth := float64(cellSize) * 1.8 // ~14px wide
+	runwayWidth := float64(cellSize) * 1.8
 
-	// Draw filled runway rectangle using two thick triangles.
 	// Four corners of the runway rectangle.
 	hw := runwayWidth / 2
 	c1x := float32(sx1 + perpX*hw)
@@ -62,11 +60,14 @@ func (g *Game) drawTowerRunway(screen *ebiten.Image, rw gamemap.Runway) {
 	c4y := float32(sy2 + perpY*hw)
 
 	// Fill using two triangles.
+	r := float32(towerRunwayFill.R) / 255
+	gc := float32(towerRunwayFill.G) / 255
+	b := float32(towerRunwayFill.B) / 255
 	vertices := []ebiten.Vertex{
-		{DstX: c1x, DstY: c1y, ColorR: float32(towerRunwayFill.R) / 255, ColorG: float32(towerRunwayFill.G) / 255, ColorB: float32(towerRunwayFill.B) / 255, ColorA: 1},
-		{DstX: c2x, DstY: c2y, ColorR: float32(towerRunwayFill.R) / 255, ColorG: float32(towerRunwayFill.G) / 255, ColorB: float32(towerRunwayFill.B) / 255, ColorA: 1},
-		{DstX: c3x, DstY: c3y, ColorR: float32(towerRunwayFill.R) / 255, ColorG: float32(towerRunwayFill.G) / 255, ColorB: float32(towerRunwayFill.B) / 255, ColorA: 1},
-		{DstX: c4x, DstY: c4y, ColorR: float32(towerRunwayFill.R) / 255, ColorG: float32(towerRunwayFill.G) / 255, ColorB: float32(towerRunwayFill.B) / 255, ColorA: 1},
+		{DstX: c1x, DstY: c1y, ColorR: r, ColorG: gc, ColorB: b, ColorA: 1},
+		{DstX: c2x, DstY: c2y, ColorR: r, ColorG: gc, ColorB: b, ColorA: 1},
+		{DstX: c3x, DstY: c3y, ColorR: r, ColorG: gc, ColorB: b, ColorA: 1},
+		{DstX: c4x, DstY: c4y, ColorR: r, ColorG: gc, ColorB: b, ColorA: 1},
 	}
 	indices := []uint16{0, 1, 2, 0, 2, 3}
 	screen.DrawTriangles(vertices, indices, whitePixel(), &ebiten.DrawTrianglesOptions{})
@@ -80,7 +81,7 @@ func (g *Game) drawTowerRunway(screen *ebiten.Image, rw gamemap.Runway) {
 	// Dashed centerline.
 	drawDashedLine(screen, float32(sx1), float32(sy1), float32(sx2), float32(sy2), 4, 3, 0.8, towerRunwayEdge)
 
-	// Threshold markings — short perpendicular bars at each end.
+	// Threshold markings.
 	threshW := float32(hw * 0.8)
 	vector.StrokeLine(screen, float32(sx1)+float32(perpX)*threshW, float32(sy1)+float32(perpY)*threshW,
 		float32(sx1)-float32(perpX)*threshW, float32(sy1)-float32(perpY)*threshW, 2, towerThreshold, false)
@@ -97,12 +98,10 @@ func (g *Game) drawTowerRunway(screen *ebiten.Image, rw gamemap.Runway) {
 		fmt.Sprintf("%d", numOpposite), 11, towerRunwayNum)
 }
 
-// --- Taxiways (gray paths with letter labels) ---
+// --- Taxiways ---
 
 func (g *Game) drawTowerTaxiways(screen *ebiten.Image) {
 	gm := g.gameMap
-
-	// Track which taxiway names we've already labeled (to avoid duplicates).
 	labeled := make(map[string]bool)
 
 	for _, edge := range gm.TaxiEdges {
@@ -114,14 +113,10 @@ func (g *Game) drawTowerTaxiways(screen *ebiten.Image) {
 		sx1, sy1 := worldToScreen(float64(from.X), float64(from.Y))
 		sx2, sy2 := worldToScreen(float64(to.X), float64(to.Y))
 
-		// Taxiway path — wider than TRACON style.
 		vector.StrokeLine(screen, float32(sx1), float32(sy1), float32(sx2), float32(sy2), 3, towerTaxiway, false)
-
-		// Intersection dots.
 		vector.DrawFilledCircle(screen, float32(sx1), float32(sy1), 2, towerTaxiway, false)
 		vector.DrawFilledCircle(screen, float32(sx2), float32(sy2), 2, towerTaxiway, false)
 
-		// Taxiway label at midpoint (once per taxiway name).
 		if !labeled[edge.Taxiway] {
 			mx := (sx1 + sx2) / 2
 			my := (sy1 + sy2) / 2
@@ -131,7 +126,7 @@ func (g *Game) drawTowerTaxiways(screen *ebiten.Image) {
 	}
 }
 
-// --- Gates (labeled rectangles) ---
+// --- Gates ---
 
 func (g *Game) drawTowerGates(screen *ebiten.Image) {
 	for _, gate := range g.gameMap.Gates {
@@ -141,17 +136,15 @@ func (g *Game) drawTowerGates(screen *ebiten.Image) {
 		}
 		sx, sy := worldToScreen(float64(node.X), float64(node.Y))
 
-		// Gate rectangle.
 		gw, gh := float32(20), float32(12)
 		vector.DrawFilledRect(screen, float32(sx)-gw/2, float32(sy)-gh/2, gw, gh, towerGateFill, false)
 		vector.StrokeRect(screen, float32(sx)-gw/2, float32(sy)-gh/2, gw, gh, 1, towerGateEdge, false)
 
-		// Gate label centered.
 		drawLabel(screen, sx-6, sy-4, gate.ID, 7, towerGateLabel)
 	}
 }
 
-// --- Hold-short markings (yellow dashed bars across taxiway) ---
+// --- Hold-short markings ---
 
 func (g *Game) drawTowerHoldShorts(screen *ebiten.Image) {
 	for _, node := range g.gameMap.TaxiNodes {
@@ -160,81 +153,113 @@ func (g *Game) drawTowerHoldShorts(screen *ebiten.Image) {
 		}
 		sx, sy := worldToScreen(float64(node.X), float64(node.Y))
 
-		// Draw perpendicular dashed yellow bar.
 		barHalf := float32(8)
 		drawDashedLine(screen,
 			float32(sx)-barHalf, float32(sy),
 			float32(sx)+barHalf, float32(sy),
 			3, 2, 1.5, towerHoldShort)
 
-		// Small label.
 		drawLabel(screen, sx+10, sy-4, "HS", 6, towerHoldShort)
 	}
 }
 
-// --- Approach inset (shows arriving traffic) ---
+// --- Live aircraft on surface ---
+
+func (g *Game) drawTowerAircraft(screen *ebiten.Image) {
+	for _, ac := range g.aircraft {
+		// Airborne aircraft on approach are shown in the inset, not on the main surface.
+		if ac.State == aircraft.Approaching || ac.State == aircraft.Crashed {
+			continue
+		}
+
+		sx, sy := worldToScreen(ac.X, ac.Y)
+
+		// Color: departures = cyan, arrivals/ground = green, conflict = red.
+		c := towerTarget
+		if ac.State == aircraft.Departing || ac.State == aircraft.OnRunway ||
+			ac.State == aircraft.Pushback || (ac.State == aircraft.AtGate && ac.AssignedRunway != "") {
+			c = towerDeparture
+		}
+		if isViolating(ac.Callsign, g.activeViolations) {
+			c = towerConflict
+		}
+
+		// Directional chevron for moving/positioned aircraft.
+		if ac.State == aircraft.Approaching || ac.State == aircraft.Landing ||
+			ac.State == aircraft.Departing || ac.State == aircraft.OnRunway ||
+			ac.State == aircraft.Taxiing {
+			drawChevron(screen, float32(sx), float32(sy), ac.Heading, 5, c)
+		} else {
+			// Static aircraft (gate, pushback, hold short) — filled square.
+			vector.DrawFilledRect(screen, float32(sx)-3, float32(sy)-3, 6, 6, c, false)
+		}
+
+		// Short leader line + callsign tag.
+		lx := sx + 10
+		ly := sy - 8
+		vector.StrokeLine(screen, float32(sx), float32(sy), float32(lx), float32(ly), 0.6, towerLeader, false)
+		drawLabel(screen, lx+2, ly-4, ac.Callsign, 8, towerDataTag)
+	}
+}
+
+// --- Approach inset (shows arriving traffic on final) ---
 
 func (g *Game) drawTowerApproachInset(screen *ebiten.Image) {
-	// Inset in the upper-right area of the screen.
 	iw, ih := float32(200), float32(100)
 	ix := float32(g.width) - iw - 20
 	iy := float32(20)
 
-	// Border.
+	// Border and label.
 	vector.StrokeRect(screen, ix, iy, iw, ih, 1, towerInsetBorder, false)
-
-	// Label.
 	drawLabel(screen, float64(ix)+4, float64(iy)+2, "FINAL APPROACH", 7, towerInsetLabel)
 
 	// Runway reference line inside inset.
 	rwY := iy + ih - 15
 	vector.StrokeLine(screen, ix+20, rwY, ix+iw-20, rwY, 2, towerRunwayEdge, false)
 
-	// Demo approach aircraft inside inset.
-	drawChevron(screen, ix+iw/2-30, iy+ih/2, 270, 4, traconTarget)
-	drawLabel(screen, float64(ix+iw/2-30)+6, float64(iy+ih/2)-4, "UA159", 6, towerDataTag)
-
-	drawChevron(screen, ix+iw/2+20, iy+ih/2-15, 268, 4, traconTarget)
-	drawLabel(screen, float64(ix+iw/2+20)+6, float64(iy+ih/2-15)-4, "AA341", 6, towerDataTag)
-}
-
-// --- Demo aircraft on surface ---
-
-func (g *Game) drawTowerDemoAircraft(screen *ebiten.Image) {
-	demos := []struct {
-		x, y     float64
-		callsign string
-		heading  int
-		isDep    bool // departure = cyan, arrival = green
-	}{
-		{x: 57, y: 26, callsign: "BA221", heading: 270, isDep: true},  // on runway
-		{x: 52, y: 28, callsign: "SW482", heading: 270, isDep: false}, // taxiing on A
-		{x: 55, y: 30, callsign: "DL789", heading: 180, isDep: true},  // at gate G3 pushing back
-	}
-
-	for _, ac := range demos {
-		sx, sy := worldToScreen(ac.x, ac.y)
-
-		c := towerTarget
-		if ac.isDep {
-			c = towerDeparture
+	// Draw approaching/landing aircraft inside the inset.
+	rw := g.gameMap.PrimaryRunway()
+	for _, ac := range g.aircraft {
+		if ac.State != aircraft.Approaching && ac.State != aircraft.Landing {
+			continue
 		}
 
-		// Directional chevron.
-		drawChevron(screen, float32(sx), float32(sy), ac.heading, 5, c)
+		// Map aircraft position relative to runway into the inset box.
+		// The approach course is along the runway heading.
+		// Distance from runway center, projected onto approach axis.
+		dx := ac.X - float64(rw.X)
+		dy := ac.Y - float64(rw.Y)
+		dist := math.Sqrt(dx*dx + dy*dy)
 
-		// Short leader line + callsign tag.
-		lx := sx + 10
-		ly := sy - 8
-		vector.StrokeLine(screen, float32(sx), float32(sy), float32(lx), float32(ly), 0.6, towerLeader, false)
-		drawLabel(screen, lx+2, ly-4, ac.callsign, 8, towerDataTag)
+		// Map distance (0-60 cells) to inset X position.
+		maxDist := float64(60)
+		t := dist / maxDist
+		if t > 1 {
+			t = 1
+		}
+
+		// Aircraft further from runway = further left in inset.
+		acX := ix + iw - 25 - float32(t)*float32(iw-50)
+		acY := iy + ih/2 + float32(dy)*0.3 // slight vertical offset
+
+		// Clamp inside inset.
+		if acX < ix+5 {
+			acX = ix + 5
+		}
+		if acY < iy+15 {
+			acY = iy + 15
+		}
+		if acY > iy+ih-20 {
+			acY = iy + ih - 20
+		}
+
+		drawChevron(screen, acX, acY, ac.Heading, 3, traconTarget)
+		drawLabel(screen, float64(acX)+5, float64(acY)-3, ac.Callsign, 6, towerDataTag)
 	}
 }
 
 // --- Helper ---
 
-// whitePixel returns a 1x1 white pixel image for use with DrawTriangles.
-// The actual color comes from the vertex color fields.
 func whitePixel() *ebiten.Image {
 	img := ebiten.NewImage(1, 1)
 	img.Fill(colorWhite)

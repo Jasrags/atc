@@ -35,6 +35,7 @@ func runGUI(role string) {
 
 	ebiten.SetWindowSize(1280, 720)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	ebiten.SetTPS(10) // match TUI tick rate: 10 physics updates per second
 
 	r := config.RoleTRACON
 	switch role {
