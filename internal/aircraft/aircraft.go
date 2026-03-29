@@ -125,10 +125,10 @@ func (a Aircraft) PatienceLevel() int {
 	if a.PatienceTicks < a.PatienceMax*3/4 {
 		return 1
 	}
-	if a.PatienceNagCount < PatienceLeaveAt {
-		return 2
+	if a.PatienceNagCount >= PatienceLeaveAt-1 {
+		return 3 // angry — one nag cycle before leaving
 	}
-	return 3
+	return 2
 }
 
 // ResetPatience returns an aircraft with the patience timer reset.

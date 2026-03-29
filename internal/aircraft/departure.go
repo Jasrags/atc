@@ -11,6 +11,7 @@ func NewDeparture(callsign string, gateX, gateY int, gate string) Aircraft {
 		Speed:        0,
 		State:        AtGate,
 		AssignedGate: gate,
+		PatienceMax:  PatienceDefault, // patience applies once airborne after takeoff
 	}
 }
 

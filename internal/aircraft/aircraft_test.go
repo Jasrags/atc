@@ -293,7 +293,7 @@ func TestPatienceLevelAngry(t *testing.T) {
 	ac := New("T1", 50, 50, 90, 5, 3)
 	ac.PatienceMax = 300
 	ac.PatienceTicks = 700
-	ac.PatienceNagCount = PatienceLeaveAt
+	ac.PatienceNagCount = PatienceLeaveAt - 1 // angry one nag before leaving
 	if ac.PatienceLevel() != 3 {
 		t.Errorf("expected angry (3), got %d", ac.PatienceLevel())
 	}
