@@ -101,12 +101,13 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role)
 		if err = requireAirborne(ac); err != nil {
 			return planes, nil, err
 		}
-		// Fix position is resolved in the game model (executor has no map access)
+		// Fix position is resolved in the game model (executor has no map access).
+		// Navigate entirely via updateHolding — do NOT set TargetFixName to avoid
+		// conflicting heading writes between updateFixHeading and updateHolding.
 		ac.HoldingFixName = cmd.HoldFix
 		ac.HoldingPhase = 0 // start inbound
 		ac.HoldingTicks = 0
-		// Also set as navigation target to fly to the fix first
-		ac.TargetFixName = cmd.HoldFix
+		ac.TargetFixName = "" // clear any active direct-to-fix
 		ac.ForceTurnDir = 0
 		changes = append(changes, fmt.Sprintf("HOLD AT %s", cmd.HoldFix))
 	}
@@ -128,6 +129,8 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role)
 		}
 		ac.State = aircraft.Landing
 		ac.AssignedLandingRunway = cmd.LandRunway
+		ac.HoldingFixName = "" // cancel hold
+		ac.TargetFixName = ""  // cancel direct
 		if cmd.LandRunway != "" {
 			changes = append(changes, fmt.Sprintf("CLEARED TO LAND RWY %s", cmd.LandRunway))
 		} else {
@@ -140,7 +143,9 @@ func Execute(cmd Command, planes map[string]aircraft.Aircraft, role config.Role)
 			return planes, nil, fmt.Errorf("%s is not on approach", cmd.Callsign)
 		}
 		ac.State = aircraft.Approaching
-		ac.TargetAltitude = 3 // climb to 3000
+		ac.TargetAltitude = 3  // climb to 3000
+		ac.HoldingFixName = "" // cancel hold
+		ac.TargetFixName = ""  // cancel direct
 		changes = append(changes, "GO AROUND")
 	}
 

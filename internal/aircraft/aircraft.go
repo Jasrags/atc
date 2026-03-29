@@ -99,7 +99,6 @@ type Aircraft struct {
 	ExpeditedAlt  bool    // double altitude change rate
 
 	// Holding pattern
-	// Holding pattern
 	HoldingFixName  string  // name of fix to hold at (empty = not holding)
 	HoldingFixX     float64 // X position of the holding fix
 	HoldingFixY     float64 // Y position of the holding fix
@@ -260,8 +259,8 @@ const (
 	HoldOutbound = 1 // Flying away from fix on outbound leg
 	HoldTurning  = 2 // Turning from outbound back to inbound
 
-	holdLegTicks    = 20 // ticks per outbound leg (~2 seconds at 10 TPS)
-	holdArrivalDist = 2.0
+	holdLegTicks    = 20             // ticks per outbound leg (~2 seconds at 10 TPS)
+	holdArrivalDist = fixArrivalDist // same threshold as direct-to-fix arrival
 )
 
 // updateHolding manages the holding pattern racetrack.
@@ -277,16 +276,27 @@ func (a Aircraft) updateHolding() Aircraft {
 	switch next.HoldingPhase {
 	case HoldInbound:
 		// Fly toward fix — recalculate heading each tick (active navigation).
-		inboundHdg := math.Atan2(dx, -dy) * 180 / math.Pi
-		if inboundHdg < 0 {
-			inboundHdg += 360
-		}
-		inbound := int(math.Round(inboundHdg)) % 360
-		next.TargetHeading = inbound
 		next.ForceTurnDir = 0
+		if dist >= 0.1 {
+			inboundHdg := math.Atan2(dx, -dy) * 180 / math.Pi
+			if inboundHdg < 0 {
+				inboundHdg += 360
+			}
+			next.TargetHeading = int(math.Round(inboundHdg)) % 360
+		}
+		// else: too close for meaningful heading calc, keep current heading
 
 		if dist < holdArrivalDist {
-			// Arrived at fix — compute and freeze the inbound heading, start outbound.
+			// Arrived at fix — freeze inbound heading for the turn target.
+			// Use current heading if at the fix (avoids atan2(0,0) = 0).
+			inbound := next.Heading
+			if dist >= 0.1 {
+				h := math.Atan2(dx, -dy) * 180 / math.Pi
+				if h < 0 {
+					h += 360
+				}
+				inbound = int(math.Round(h)) % 360
+			}
 			next.HoldingInboundH = inbound
 			next.HoldingPhase = HoldOutbound
 			next.HoldingTicks = 0

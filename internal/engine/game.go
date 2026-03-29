@@ -297,7 +297,7 @@ func (g *Game) processCommand(input string) {
 		}
 	}
 
-	// Resolve hold-at-fix — set both holding and navigation fix positions.
+	// Resolve hold-at-fix — set holding fix position only (navigation via updateHolding).
 	if cmd.HoldFix != "" {
 		ac := newPlanes[cmd.Callsign]
 		found := false
@@ -305,8 +305,6 @@ func (g *Game) processCommand(input string) {
 			if fix.Name == cmd.HoldFix {
 				ac.HoldingFixX = float64(fix.X)
 				ac.HoldingFixY = float64(fix.Y)
-				ac.TargetFixX = float64(fix.X)
-				ac.TargetFixY = float64(fix.Y)
 				newPlanes[cmd.Callsign] = ac
 				found = true
 				break

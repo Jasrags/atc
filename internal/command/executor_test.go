@@ -507,8 +507,8 @@ func TestExecuteHoldAtFix(t *testing.T) {
 	if newPlanes["AA123"].HoldingFixName != "MAFAN" {
 		t.Errorf("HoldingFixName = %s, want MAFAN", newPlanes["AA123"].HoldingFixName)
 	}
-	if newPlanes["AA123"].TargetFixName != "MAFAN" {
-		t.Errorf("TargetFixName = %s, want MAFAN (should fly to fix first)", newPlanes["AA123"].TargetFixName)
+	if newPlanes["AA123"].TargetFixName != "" {
+		t.Errorf("TargetFixName = %s, want empty (hold navigates via updateHolding)", newPlanes["AA123"].TargetFixName)
 	}
 	if len(changes) == 0 {
 		t.Error("expected changes")
