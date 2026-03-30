@@ -70,7 +70,8 @@ func (g *Game) drawTraconFixes(screen *ebiten.Image) {
 			vector.StrokeLine(screen, float32(sx), float32(sy)-3, float32(sx), float32(sy)+3, 0.8, traconFix, false)
 		}
 
-		drawLabel(screen, sx+7, sy-3, fix.Name, 7, traconFixLabel)
+		fixFont := scaledFontSize(3, g.camera.Zoom, 7, 18)
+		drawLabel(screen, sx+7, sy-3, fix.Name, fixFont, traconFixLabel)
 	}
 }
 
@@ -117,10 +118,11 @@ func (g *Game) drawTraconRunway(screen *ebiten.Image, rw gamemap.Runway) {
 	numApproach := gamemap.RunwayNumber(rw.Heading)
 	numOpposite := gamemap.RunwayNumber(rw.OppositeHeading())
 
+	rwyFont := scaledFontSize(4, g.camera.Zoom, 9, 22)
 	drawLabel(screen, sx2+dx*16, sy2-dy*16-4,
-		fmt.Sprintf("%d", numApproach), 9, traconRunwayNum)
+		fmt.Sprintf("%d", numApproach), rwyFont, traconRunwayNum)
 	drawLabel(screen, sx1-dx*16-14, sy1+dy*16-4,
-		fmt.Sprintf("%d", numOpposite), 9, traconRunwayNum)
+		fmt.Sprintf("%d", numOpposite), rwyFont, traconRunwayNum)
 }
 
 // --- Compass rose ---
@@ -157,9 +159,10 @@ func (g *Game) drawTraconCompassRose(screen *ebiten.Image) {
 
 		// Label at 30-degree intervals.
 		if label, ok := compassLabels[deg]; ok {
+			compassFont := scaledFontSize(3, g.camera.Zoom, 7, 16)
 			lx := float64(cx) + sin*(radius+8) - 4
 			ly := float64(cy) + cos*(radius+8) - 4
-			drawLabel(screen, lx, ly, label, 7, traconFixLabel)
+			drawLabel(screen, lx, ly, label, compassFont, traconFixLabel)
 		}
 	}
 }
@@ -244,9 +247,10 @@ func (g *Game) drawTraconAircraft(screen *ebiten.Image) {
 		} else if ac.Altitude > ac.TargetAltitude {
 			altArrow = "\u2193" // ↓
 		}
-		drawLabel(screen, lx+3, ly-10, ac.Callsign, 9, dbColor)
+		acFont := scaledFontSize(4, g.camera.Zoom, 9, 20)
+		drawLabel(screen, lx+3, ly-acFont*1.1, ac.Callsign, acFont, dbColor)
 		drawLabel(screen, lx+3, ly,
-			fmt.Sprintf("%02d %02d%s", ac.Altitude, ac.Speed*10, altArrow), 8, dbColor)
+			fmt.Sprintf("%02d %02d%s", ac.Altitude, ac.Speed*10, altArrow), acFont*0.85, dbColor)
 	}
 }
 
