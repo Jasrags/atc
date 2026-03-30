@@ -90,7 +90,8 @@ Above the command input, showing the last 5 messages:
 
 | Control | Action |
 |---------|--------|
-| p | Freeze / unfreeze time (when input is empty) |
+| /pause | Freeze time |
+| /resume | Resume time |
 | [ | Slow down (1x minimum) |
 | ] | Speed up (12x maximum) |
 

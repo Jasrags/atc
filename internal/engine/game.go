@@ -135,11 +135,8 @@ func (g *Game) Update() error {
 	// Camera controls always active.
 	g.updateCamera()
 
-	// Time controls — only when input is empty (same as TUI).
+	// Speed controls — only when input is empty.
 	if g.input.IsEmpty() {
-		if inpututil.IsKeyJustPressed(ebiten.KeyP) {
-			g.timeFrozen = !g.timeFrozen
-		}
 		if inpututil.IsKeyJustPressed(ebiten.KeyBracketRight) {
 			g.speedMultiplier++
 			if g.speedMultiplier > maxSpeedMul {
@@ -157,8 +154,23 @@ func (g *Game) Update() error {
 	// Text input — always processes characters.
 	submitted := g.input.Update()
 	if submitted != "" {
-		if strings.HasPrefix(submitted, "/") && g.devMode {
-			g.processDevCommand(strings.TrimPrefix(submitted, "/"))
+		if strings.HasPrefix(submitted, "/") {
+			cmd := strings.TrimPrefix(submitted, "/")
+			// /pause and /resume are available to all players.
+			switch strings.ToLower(strings.Fields(cmd)[0]) {
+			case "pause":
+				g.timeFrozen = true
+				g.addRadio(radio.SystemMessage(g.elapsed, "time frozen — type /resume to continue", radio.Normal))
+			case "resume":
+				g.timeFrozen = false
+				g.addRadio(radio.SystemMessage(g.elapsed, "time resumed", radio.Normal))
+			default:
+				if g.devMode {
+					g.processDevCommand(cmd)
+				} else {
+					g.addRadio(radio.SystemMessage(g.elapsed, "unknown command: /"+cmd, radio.Normal))
+				}
+			}
 		} else {
 			g.processCommand(submitted)
 		}

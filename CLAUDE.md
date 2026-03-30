@@ -129,7 +129,8 @@ make help        # Show all targets
 | Arrow keys | Pan (when input empty) |
 | +/- | Zoom from keyboard (when input empty) |
 | Home | Reset to default view for current role |
-| p | Freeze / unfreeze time (when input empty) |
+| /pause | Freeze time |
+| /resume | Resume time |
 | [ / ] | Decrease / increase speed 1x-12x (when input empty) |
 | Esc | Quit |
 | R | Restart (on game over screen) |
